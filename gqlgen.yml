@@ -1,0 +1,7 @@
+schema: schema.graphql
+exec:
+  filename: pkg/graphql/generated/generated.go
+  package: generated
+model:
+  filename: pkg/graphql/models/models.go
+  package: models

@@ -1,0 +1,100 @@
+schema {
+    query: Query
+    mutation: Mutation
+    #    subscription: Subscription
+}
+scalar Time
+interface Check {
+    id: ID!
+    identifier: String!
+    frecuency: String!
+    status: String!
+    latestCheck: Time
+    message: String
+    errorMsg: String
+}
+type HttpCheck implements Check {
+    id: ID!
+    identifier: String!
+    frecuency: String!
+    url: String!
+    status: String!
+    latestCheck: Time
+    message: String
+    errorMsg: String
+}
+
+type TcpCheck implements Check {
+    id: ID!
+    identifier: String!
+    frecuency: String!
+    address: String!
+    status: String!
+    latestCheck: Time
+    message: String
+    errorMsg: String
+}
+
+type TlsCheck implements Check {
+    id: ID!
+    identifier: String!
+    frecuency: String!
+    address: String!
+    status: String!
+    latestCheck: Time
+    message: String
+    errorMsg: String
+}
+
+type IcmpCheck implements Check {
+    id: ID!
+    identifier: String!
+    frecuency: String!
+    address: String!
+    status: String!
+    latestCheck: Time
+    message: String
+    errorMsg: String
+}
+
+input CreateHttpCheckInput {
+    id: String!
+    frecuency: String!
+    url: String!
+}
+type DeleteResponse {
+    id: ID!
+}
+type PollResult {
+    took: Int!
+}
+type Mutation {
+    poll: PollResult
+    createHttpCheck(input: CreateHttpCheckInput!): Check!
+    createTcpCheck(input: CreateTcpCheckInput!): Check!
+    createTlsCheck(input: CreateTlsCheckInput!): Check!
+    createIcmpCheck(input: CreateIcmpCheckInput!): Check!
+    deleteCheck(id: ID!): DeleteResponse!
+}
+
+input CreateIcmpCheckInput {
+    id: String!
+    frecuency: String!
+    address: String!
+}
+
+input CreateTlsCheckInput {
+    id: String!
+    frecuency: String!
+    address: String!
+    rootCAs:String
+}
+
+input CreateTcpCheckInput {
+    id: String!
+    frecuency: String!
+    address: String!
+}
+type Query {
+    checks: [Check!]
+}
