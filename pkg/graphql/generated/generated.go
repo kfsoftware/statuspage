@@ -44,6 +44,14 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	CheckExecution struct {
+		ErrorMsg      func(childComplexity int) int
+		ExecutionTime func(childComplexity int) int
+		ID            func(childComplexity int) int
+		Message       func(childComplexity int) int
+		Status        func(childComplexity int) int
+	}
+
 	DeleteResponse struct {
 		ID func(childComplexity int) int
 	}
@@ -84,7 +92,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Checks func(childComplexity int) int
+		Checks     func(childComplexity int) int
+		Executions func(childComplexity int, checkID string, from *time.Time, until *time.Time) int
 	}
 
 	TCPCheck struct {
@@ -120,6 +129,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Checks(ctx context.Context) ([]models.Check, error)
+	Executions(ctx context.Context, checkID string, from *time.Time, until *time.Time) ([]*models.CheckExecution, error)
 }
 
 type executableSchema struct {
@@ -136,6 +146,41 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 	ec := executionContext{nil, e}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "CheckExecution.errorMsg":
+		if e.complexity.CheckExecution.ErrorMsg == nil {
+			break
+		}
+
+		return e.complexity.CheckExecution.ErrorMsg(childComplexity), true
+
+	case "CheckExecution.executionTime":
+		if e.complexity.CheckExecution.ExecutionTime == nil {
+			break
+		}
+
+		return e.complexity.CheckExecution.ExecutionTime(childComplexity), true
+
+	case "CheckExecution.id":
+		if e.complexity.CheckExecution.ID == nil {
+			break
+		}
+
+		return e.complexity.CheckExecution.ID(childComplexity), true
+
+	case "CheckExecution.message":
+		if e.complexity.CheckExecution.Message == nil {
+			break
+		}
+
+		return e.complexity.CheckExecution.Message(childComplexity), true
+
+	case "CheckExecution.status":
+		if e.complexity.CheckExecution.Status == nil {
+			break
+		}
+
+		return e.complexity.CheckExecution.Status(childComplexity), true
 
 	case "DeleteResponse.id":
 		if e.complexity.DeleteResponse.ID == nil {
@@ -337,6 +382,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.Checks(childComplexity), true
 
+	case "Query.executions":
+		if e.complexity.Query.Executions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_executions_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Executions(childComplexity, args["checkId"].(string), args["from"].(*time.Time), args["until"].(*time.Time)), true
+
 	case "TcpCheck.address":
 		if e.complexity.TCPCheck.Address == nil {
 			break
@@ -519,14 +576,21 @@ var sources = []*ast.Source{
     #    subscription: Subscription
 }
 scalar Time
+type CheckExecution {
+    id : ID!
+    executionTime: Time!
+    message: String!
+    errorMsg: String!
+    status: String!
+}
 interface Check {
     id: ID!
     identifier: String!
     frecuency: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 type HttpCheck implements Check {
     id: ID!
@@ -535,8 +599,8 @@ type HttpCheck implements Check {
     url: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type TcpCheck implements Check {
@@ -546,8 +610,8 @@ type TcpCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type TlsCheck implements Check {
@@ -557,8 +621,8 @@ type TlsCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type IcmpCheck implements Check {
@@ -568,8 +632,8 @@ type IcmpCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 input CreateHttpCheckInput {
@@ -612,6 +676,11 @@ input CreateTcpCheckInput {
 }
 type Query {
     checks: [Check!]
+    executions(
+        checkId: ID!,
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 `, BuiltIn: false},
 }
@@ -711,6 +780,39 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_executions_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["checkId"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("checkId"))
+		arg0, err = ec.unmarshalNID2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["checkId"] = arg0
+	var arg1 *time.Time
+	if tmp, ok := rawArgs["from"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("from"))
+		arg1, err = ec.unmarshalOTime2ᚖtimeᚐTime(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["from"] = arg1
+	var arg2 *time.Time
+	if tmp, ok := rawArgs["until"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("until"))
+		arg2, err = ec.unmarshalOTime2ᚖtimeᚐTime(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["until"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field___Type_enumValues_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
@@ -748,6 +850,181 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _CheckExecution_id(ctx context.Context, field graphql.CollectedField, obj *models.CheckExecution) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "CheckExecution",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _CheckExecution_executionTime(ctx context.Context, field graphql.CollectedField, obj *models.CheckExecution) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "CheckExecution",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ExecutionTime, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(time.Time)
+	fc.Result = res
+	return ec.marshalNTime2timeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _CheckExecution_message(ctx context.Context, field graphql.CollectedField, obj *models.CheckExecution) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "CheckExecution",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Message, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _CheckExecution_errorMsg(ctx context.Context, field graphql.CollectedField, obj *models.CheckExecution) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "CheckExecution",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ErrorMsg, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _CheckExecution_status(ctx context.Context, field graphql.CollectedField, obj *models.CheckExecution) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "CheckExecution",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Status, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
 
 func (ec *executionContext) _DeleteResponse_id(ctx context.Context, field graphql.CollectedField, obj *models.DeleteResponse) (ret graphql.Marshaler) {
 	defer func() {
@@ -1016,11 +1293,14 @@ func (ec *executionContext) _HttpCheck_message(ctx context.Context, field graphq
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _HttpCheck_errorMsg(ctx context.Context, field graphql.CollectedField, obj *models.HTTPCheck) (ret graphql.Marshaler) {
@@ -1048,11 +1328,14 @@ func (ec *executionContext) _HttpCheck_errorMsg(ctx context.Context, field graph
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _IcmpCheck_id(ctx context.Context, field graphql.CollectedField, obj *models.IcmpCheck) (ret graphql.Marshaler) {
@@ -1287,11 +1570,14 @@ func (ec *executionContext) _IcmpCheck_message(ctx context.Context, field graphq
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _IcmpCheck_errorMsg(ctx context.Context, field graphql.CollectedField, obj *models.IcmpCheck) (ret graphql.Marshaler) {
@@ -1319,11 +1605,14 @@ func (ec *executionContext) _IcmpCheck_errorMsg(ctx context.Context, field graph
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Mutation_poll(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -1635,6 +1924,45 @@ func (ec *executionContext) _Query_checks(ctx context.Context, field graphql.Col
 	return ec.marshalOCheck2ᚕgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheckᚄ(ctx, field.Selections, res)
 }
 
+func (ec *executionContext) _Query_executions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   true,
+		IsResolver: true,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Query_executions_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Executions(rctx, args["checkId"].(string), args["from"].(*time.Time), args["until"].(*time.Time))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.([]*models.CheckExecution)
+	fc.Result = res
+	return ec.marshalOCheckExecution2ᚕᚖgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheckExecutionᚄ(ctx, field.Selections, res)
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -1938,11 +2266,14 @@ func (ec *executionContext) _TcpCheck_message(ctx context.Context, field graphql
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _TcpCheck_errorMsg(ctx context.Context, field graphql.CollectedField, obj *models.TCPCheck) (ret graphql.Marshaler) {
@@ -1970,11 +2301,14 @@ func (ec *executionContext) _TcpCheck_errorMsg(ctx context.Context, field graphq
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _TlsCheck_id(ctx context.Context, field graphql.CollectedField, obj *models.TLSCheck) (ret graphql.Marshaler) {
@@ -2209,11 +2543,14 @@ func (ec *executionContext) _TlsCheck_message(ctx context.Context, field graphql
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _TlsCheck_errorMsg(ctx context.Context, field graphql.CollectedField, obj *models.TLSCheck) (ret graphql.Marshaler) {
@@ -2241,11 +2578,14 @@ func (ec *executionContext) _TlsCheck_errorMsg(ctx context.Context, field graphq
 		return graphql.Null
 	}
 	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
-	res := resTmp.(*string)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
@@ -3532,6 +3872,53 @@ func (ec *executionContext) _Check(ctx context.Context, sel ast.SelectionSet, ob
 
 // region    **************************** object.gotpl ****************************
 
+var checkExecutionImplementors = []string{"CheckExecution"}
+
+func (ec *executionContext) _CheckExecution(ctx context.Context, sel ast.SelectionSet, obj *models.CheckExecution) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, checkExecutionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CheckExecution")
+		case "id":
+			out.Values[i] = ec._CheckExecution_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "executionTime":
+			out.Values[i] = ec._CheckExecution_executionTime(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "message":
+			out.Values[i] = ec._CheckExecution_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "errorMsg":
+			out.Values[i] = ec._CheckExecution_errorMsg(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "status":
+			out.Values[i] = ec._CheckExecution_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
 var deleteResponseImplementors = []string{"DeleteResponse"}
 
 func (ec *executionContext) _DeleteResponse(ctx context.Context, sel ast.SelectionSet, obj *models.DeleteResponse) graphql.Marshaler {
@@ -3599,8 +3986,14 @@ func (ec *executionContext) _HttpCheck(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = ec._HttpCheck_latestCheck(ctx, field, obj)
 		case "message":
 			out.Values[i] = ec._HttpCheck_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "errorMsg":
 			out.Values[i] = ec._HttpCheck_errorMsg(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3652,8 +4045,14 @@ func (ec *executionContext) _IcmpCheck(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = ec._IcmpCheck_latestCheck(ctx, field, obj)
 		case "message":
 			out.Values[i] = ec._IcmpCheck_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "errorMsg":
 			out.Values[i] = ec._IcmpCheck_errorMsg(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3771,6 +4170,17 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				res = ec._Query_checks(ctx, field)
 				return res
 			})
+		case "executions":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_executions(ctx, field)
+				return res
+			})
 		case "__type":
 			out.Values[i] = ec._Query___type(ctx, field)
 		case "__schema":
@@ -3826,8 +4236,14 @@ func (ec *executionContext) _TcpCheck(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._TcpCheck_latestCheck(ctx, field, obj)
 		case "message":
 			out.Values[i] = ec._TcpCheck_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "errorMsg":
 			out.Values[i] = ec._TcpCheck_errorMsg(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3879,8 +4295,14 @@ func (ec *executionContext) _TlsCheck(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._TlsCheck_latestCheck(ctx, field, obj)
 		case "message":
 			out.Values[i] = ec._TlsCheck_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "errorMsg":
 			out.Values[i] = ec._TlsCheck_errorMsg(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -4162,6 +4584,16 @@ func (ec *executionContext) marshalNCheck2githubᚗcomᚋkfsoftwareᚋstatuspage
 	return ec._Check(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNCheckExecution2ᚖgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheckExecution(ctx context.Context, sel ast.SelectionSet, v *models.CheckExecution) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	return ec._CheckExecution(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNCreateHttpCheckInput2githubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCreateHTTPCheckInput(ctx context.Context, v interface{}) (models.CreateHTTPCheckInput, error) {
 	res, err := ec.unmarshalInputCreateHttpCheckInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -4233,6 +4665,21 @@ func (ec *executionContext) unmarshalNString2string(ctx context.Context, v inter
 
 func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
 	res := graphql.MarshalString(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "must not be null")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v interface{}) (time.Time, error) {
+	res, err := graphql.UnmarshalTime(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel ast.SelectionSet, v time.Time) graphql.Marshaler {
+	res := graphql.MarshalTime(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "must not be null")
@@ -4522,6 +4969,46 @@ func (ec *executionContext) marshalOCheck2ᚕgithubᚗcomᚋkfsoftwareᚋstatusp
 				defer wg.Done()
 			}
 			ret[i] = ec.marshalNCheck2githubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheck(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+	return ret
+}
+
+func (ec *executionContext) marshalOCheckExecution2ᚕᚖgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheckExecutionᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.CheckExecution) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCheckExecution2ᚖgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐCheckExecution(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)

@@ -4,14 +4,21 @@ schema {
     #    subscription: Subscription
 }
 scalar Time
+type CheckExecution {
+    id : ID!
+    executionTime: Time!
+    message: String!
+    errorMsg: String!
+    status: String!
+}
 interface Check {
     id: ID!
     identifier: String!
     frecuency: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 type HttpCheck implements Check {
     id: ID!
@@ -20,8 +27,8 @@ type HttpCheck implements Check {
     url: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type TcpCheck implements Check {
@@ -31,8 +38,8 @@ type TcpCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type TlsCheck implements Check {
@@ -42,8 +49,8 @@ type TlsCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 type IcmpCheck implements Check {
@@ -53,8 +60,8 @@ type IcmpCheck implements Check {
     address: String!
     status: String!
     latestCheck: Time
-    message: String
-    errorMsg: String
+    message: String!
+    errorMsg: String!
 }
 
 input CreateHttpCheckInput {
@@ -97,4 +104,9 @@ input CreateTcpCheckInput {
 }
 type Query {
     checks: [Check!]
+    executions(
+        checkId: ID!,
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }

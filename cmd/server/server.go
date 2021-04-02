@@ -1,7 +1,6 @@
-package main
+package server
 
 import (
-	"fmt"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/apollotracing"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -26,14 +25,132 @@ import (
 	"time"
 )
 
-var rootCmd = &cobra.Command{
-	Use:    "hlf-sync",
-	Short:  "HLF sync",
-	Long:   `HLF sync is a tool to store all the transaction data of Hyperledger Fabric into a database`,
-	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		//cmd.AddCommand(syncCmd)
-	},
+type serverCmd struct {
+	config string
+	addr   string
+}
+
+func (s *serverCmd) validate() error {
+	return nil
+}
+func (s *serverCmd) run() error {
+	var err error
+	provider := viper.GetString("database.type")
+	var dbClient *gorm.DB
+	switch provider {
+	case string(Database):
+		driverName := viper.GetString("database.driver")
+		dataSource := viper.GetString("database.dataSource")
+		var drName DriverName
+		switch driverName {
+		case PostgresqlDriver:
+			drName = PostgresqlDriver
+		case MySQLDriver:
+			drName = MySQLDriver
+		default:
+			return errors.Errorf("Driver %s not supported", driverName)
+		}
+		dbClient, err = newDbStorage(
+			drName,
+			dataSource,
+		)
+		if err != nil {
+			return err
+		}
+	default:
+		return errors.Errorf("No valid provider: %s", provider)
+	}
+
+	r := gin.Default()
+
+	c := cron.New(cron.WithSeconds())
+	go func() {
+		db.CheckAll(dbClient)
+	}()
+	spec := viper.GetString("cron")
+	if spec == "" {
+		spec = "@every 1m"
+		log.Warnf("`cron` property not set, defaulting to %s", spec)
+	}
+	_, err = c.AddFunc(spec, func() {
+		db.CheckAll(dbClient)
+	})
+	if err != nil {
+		return err
+	}
+	c.Start()
+	es := generated.NewExecutableSchema(generated.Config{
+		Resolvers: &resolvers.Resolver{
+			Db: dbClient,
+		},
+	})
+	h := handler.New(es)
+
+	h.AddTransport(transport.Websocket{
+		KeepAlivePingInterval: 10 * time.Second,
+		Upgrader:              wsupgrader,
+	})
+	h.AddTransport(transport.Options{})
+	h.AddTransport(transport.GET{})
+	h.AddTransport(transport.POST{})
+	h.AddTransport(transport.MultipartForm{})
+
+	h.SetQueryCache(lru.New(1000))
+	h.Use(extension.Introspection{})
+	h.Use(extension.AutomaticPersistedQuery{
+		Cache: lru.New(100),
+	})
+	h.Use(apollotracing.Tracer{})
+
+	r.Any("/graphql",
+		func(c *gin.Context) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Identity")
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+			h.ServeHTTP(c.Writer, c.Request)
+		},
+	)
+	playgroundHandler := playground.Handler("GraphQL", "/graphql")
+	r.GET("/playground", func(c *gin.Context) {
+		playgroundHandler.ServeHTTP(c.Writer, c.Request)
+	})
+	listenAddr := s.addr
+	if listenAddr == "" {
+		listenAddr = viper.GetString("address")
+	}
+	if listenAddr == "" {
+		listenAddr = "0.0.0.0:80"
+	}
+	err = r.Run(listenAddr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewServerCmd() *cobra.Command {
+	c := &serverCmd{}
+	cmd := &cobra.Command{
+		Use: "server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			viper.SetConfigFile(c.config)
+			err := viper.ReadInConfig()
+			if err != nil {
+				return err
+			}
+			if err := c.validate(); err != nil {
+				return err
+			}
+			return c.run()
+		},
+	}
+	persistentFlags := cmd.PersistentFlags()
+	persistentFlags.StringVarP(&c.config, "config", "", "statuspage", "Configuration file")
+	persistentFlags.StringVarP(&c.addr, "address", "", "", "Listen address")
+
+	cmd.MarkPersistentFlagRequired("config")
+	return cmd
 }
 
 type DriverName string
@@ -81,11 +198,11 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 	}
 	err = dbClient.AutoMigrate(&db.Check{})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	err = dbClient.AutoMigrate(&db.CheckExecution{})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return dbClient, nil
@@ -96,111 +213,6 @@ type Provider string
 const (
 	Database Provider = "sql"
 )
-
-func main() {
-	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
-	customFormatter.FullTimestamp = true
-	log.SetFormatter(customFormatter)
-
-	viper.SetConfigName("statuspage")
-	viper.SetConfigType("yaml")
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("statuspage")
-	viper.AddConfigPath(".")
-	err := viper.ReadInConfig() // Find and read the config file
-	if err != nil {             // Handle errors reading the config file
-		panic(fmt.Errorf("Fatal error config file: %s \n", err))
-	}
-	provider := viper.GetString("database.type")
-	var dbClient *gorm.DB
-	switch provider {
-	case string(Database):
-		driverName := viper.GetString("database.driver")
-		dataSource := viper.GetString("database.dataSource")
-		var drName DriverName
-		switch driverName {
-		case PostgresqlDriver:
-			drName = PostgresqlDriver
-		case MySQLDriver:
-			drName = MySQLDriver
-		default:
-			panic(errors.Errorf("Driver %s not supported", driverName))
-		}
-		dbClient, err = newDbStorage(
-			drName,
-			dataSource,
-		)
-		if err != nil {
-			panic(err)
-		}
-	default:
-		panic(errors.Errorf("No valid provider: %s", provider))
-	}
-
-	r := gin.Default()
-
-	c := cron.New(cron.WithSeconds())
-	go func() {
-		db.CheckAll(dbClient)
-	}()
-	spec := viper.GetString("cron")
-	if spec == "" {
-		spec = "@every 1m"
-		log.Warnf("`cron` property not set, defaulting to %s", spec)
-	}
-	_, err = c.AddFunc(spec, func() {
-		db.CheckAll(dbClient)
-	})
-	if err != nil {
-		panic(err)
-	}
-	c.Start()
-	es := generated.NewExecutableSchema(generated.Config{
-		Resolvers: &resolvers.Resolver{
-			Db: dbClient,
-		},
-	})
-	h := handler.New(es)
-
-	h.AddTransport(transport.Websocket{
-		KeepAlivePingInterval: 10 * time.Second,
-		Upgrader:              wsupgrader,
-	})
-	h.AddTransport(transport.Options{})
-	h.AddTransport(transport.GET{})
-	h.AddTransport(transport.POST{})
-	h.AddTransport(transport.MultipartForm{})
-
-	h.SetQueryCache(lru.New(1000))
-	h.Use(extension.Introspection{})
-	h.Use(extension.AutomaticPersistedQuery{
-		Cache: lru.New(100),
-	})
-	h.Use(apollotracing.Tracer{})
-
-	r.Any("/graphql",
-		func(c *gin.Context) {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Identity")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-			h.ServeHTTP(c.Writer, c.Request)
-		},
-	)
-	playgroundHandler := playground.Handler("GraphQL", "/graphql")
-	r.GET("/playground", func(c *gin.Context) {
-		playgroundHandler.ServeHTTP(c.Writer, c.Request)
-	})
-	listenAddr := viper.GetString("address")
-	if listenAddr == "" {
-		listenAddr = "0.0.0.0:80"
-	}
-	err = r.Run(listenAddr)
-	if err != nil {
-		panic(err)
-	}
-}
 
 var wsupgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,

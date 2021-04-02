@@ -1,0 +1,49 @@
+project_name: statuspage
+
+release:
+  name_template: "Version {{.Version}}"
+  github:
+    owner: kfsoftware
+    name: statuspage
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: statuspage
+    binary: statuspage
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Tag}}
+    flags:
+      - -trimpath
+
+archives:
+  - format: binary
+    allow_different_binary_count: true
+
+dockers:
+  - # GOOS of the built binary that should be used.
+    goos: linux
+    # GOARCH of the built binary that should be used.
+    goarch: amd64
+    dockerfile: Dockerfile
+    image_templates:
+      - "quay.io/kfsoftware/statuspage:{{ .Tag }}"
+      - "quay.io/kfsoftware/statuspage:v{{ .Major }}"
+      - "quay.io/kfsoftware/statuspage:v{{ .Major }}.{{ .Minor }}"
+      - "quay.io/kfsoftware/statuspage:latest"
+
+    extra_files:
+      - LICENSE
+      - README.md

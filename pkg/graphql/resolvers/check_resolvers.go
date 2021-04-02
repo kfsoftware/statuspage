@@ -172,6 +172,26 @@ func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.Crea
 
 type queryResolver struct{ *Resolver }
 
+func (q queryResolver) Executions(ctx context.Context, checkID string, from *time.Time, until *time.Time) ([]*models.CheckExecution, error) {
+	var executions []db.CheckExecution
+	result := q.Db.Where("check_id = ? AND created_at BETWEEN ? AND ?", checkID, from, until).Find(&executions)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	var modelExecutions []*models.CheckExecution
+	for _, execution := range executions {
+		modelExecutions = append(modelExecutions, &models.CheckExecution{
+			ID:            execution.ID,
+			ExecutionTime: execution.CreatedAt,
+			Message:       execution.Message,
+			ErrorMsg:      execution.ErrorMsg,
+			Status:        string(execution.Status),
+		})
+	}
+	return modelExecutions, nil
+
+}
+
 func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 	var checks []db.Check
 	result := q.Db.Find(&checks)
@@ -196,8 +216,8 @@ func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 				URL:         httpCheckData.Url,
 				Status:      string(chk.Status),
 				LatestCheck: &latestCheck,
-				ErrorMsg:    &errorMsg,
-				Message:     &msg,
+				ErrorMsg:    errorMsg,
+				Message:     msg,
 			})
 		case check.TcpType:
 			tcpCheckData, err := chk.GetTcpData()
@@ -211,8 +231,8 @@ func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 				Address:     tcpCheckData.Address,
 				Status:      string(chk.Status),
 				LatestCheck: &latestCheck,
-				ErrorMsg:    &errorMsg,
-				Message:     &msg,
+				ErrorMsg:    errorMsg,
+				Message:     msg,
 			})
 		case check.TlsType:
 			tlsCheckData, err := chk.GetTlsData()
@@ -226,8 +246,8 @@ func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 				Address:     tlsCheckData.Address,
 				Status:      string(chk.Status),
 				LatestCheck: &latestCheck,
-				ErrorMsg:    &errorMsg,
-				Message:     &msg,
+				ErrorMsg:    errorMsg,
+				Message:     msg,
 			})
 		case check.IcmpType:
 			icmpCheckData, err := chk.GetIcmpData()
@@ -241,8 +261,8 @@ func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 				Address:     icmpCheckData.Address,
 				Status:      string(chk.Status),
 				LatestCheck: &latestCheck,
-				ErrorMsg:    &errorMsg,
-				Message:     &msg,
+				ErrorMsg:    errorMsg,
+				Message:     msg,
 			})
 		}
 

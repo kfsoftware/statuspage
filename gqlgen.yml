@@ -5,3 +5,11 @@ exec:
 model:
   filename: pkg/graphql/models/models.go
   package: models
+
+# TODO: figure out how to do data load
+#models:
+#  Check:
+#    model: github.com/kfsoftware/statuspage/dataloader.Check
+#  CheckExecution:
+#    model: github.com/kfsoftware/statuspage/dataloader.CheckExecution
+# go run github.com/vektah/dataloaden CheckLoader int *github.com/kfsoftware/statuspage/pkg/graphql/models.CheckExecution

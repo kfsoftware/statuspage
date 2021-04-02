@@ -10,6 +10,14 @@ type Check interface {
 	IsCheck()
 }
 
+type CheckExecution struct {
+	ID            string    `json:"id"`
+	ExecutionTime time.Time `json:"executionTime"`
+	Message       string    `json:"message"`
+	ErrorMsg      string    `json:"errorMsg"`
+	Status        string    `json:"status"`
+}
+
 type CreateHTTPCheckInput struct {
 	ID        string `json:"id"`
 	Frecuency string `json:"frecuency"`
@@ -46,8 +54,8 @@ type HTTPCheck struct {
 	URL         string     `json:"url"`
 	Status      string     `json:"status"`
 	LatestCheck *time.Time `json:"latestCheck"`
-	Message     *string    `json:"message"`
-	ErrorMsg    *string    `json:"errorMsg"`
+	Message     string     `json:"message"`
+	ErrorMsg    string     `json:"errorMsg"`
 }
 
 func (HTTPCheck) IsCheck() {}
@@ -59,8 +67,8 @@ type IcmpCheck struct {
 	Address     string     `json:"address"`
 	Status      string     `json:"status"`
 	LatestCheck *time.Time `json:"latestCheck"`
-	Message     *string    `json:"message"`
-	ErrorMsg    *string    `json:"errorMsg"`
+	Message     string     `json:"message"`
+	ErrorMsg    string     `json:"errorMsg"`
 }
 
 func (IcmpCheck) IsCheck() {}
@@ -76,8 +84,8 @@ type TCPCheck struct {
 	Address     string     `json:"address"`
 	Status      string     `json:"status"`
 	LatestCheck *time.Time `json:"latestCheck"`
-	Message     *string    `json:"message"`
-	ErrorMsg    *string    `json:"errorMsg"`
+	Message     string     `json:"message"`
+	ErrorMsg    string     `json:"errorMsg"`
 }
 
 func (TCPCheck) IsCheck() {}
@@ -89,8 +97,8 @@ type TLSCheck struct {
 	Address     string     `json:"address"`
 	Status      string     `json:"status"`
 	LatestCheck *time.Time `json:"latestCheck"`
-	Message     *string    `json:"message"`
-	ErrorMsg    *string    `json:"errorMsg"`
+	Message     string     `json:"message"`
+	ErrorMsg    string     `json:"errorMsg"`
 }
 
 func (TLSCheck) IsCheck() {}
