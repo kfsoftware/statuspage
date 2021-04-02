@@ -269,7 +269,7 @@ func checkAll(db *gorm.DB) error {
 				}()
 			}
 		} else {
-			log.Warn("No healthcheck found for id=%s type=%s", chk.ID, chk.Type)
+			log.Warn("No healthcheck found for id=%s type=%s", chk.ID, string(chk.Type))
 		}
 	}
 	return nil
