@@ -12,8 +12,8 @@ import (
 	"github.com/kfsoftware/statuspage/pkg/db"
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
 	"github.com/kfsoftware/statuspage/pkg/graphql/resolvers"
+	"github.com/kfsoftware/statuspage/pkg/jobs"
 	"github.com/pkg/errors"
-	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -63,25 +63,33 @@ func (s *serverCmd) run() error {
 
 	r := gin.Default()
 
-	c := cron.New(cron.WithSeconds())
-	go func() {
-		db.CheckAll(dbClient)
-	}()
-	spec := viper.GetString("cron")
-	if spec == "" {
-		spec = "@every 1m"
-		log.Warnf("`cron` property not set, defaulting to %s", spec)
+	schedRegistry := jobs.NewSchedulerRegistry(
+		time.Local,
+	)
+	log.Infof("Checking all items")
+	db.CheckAll(dbClient)
+	var checks []db.Check
+	result := dbClient.Find(&checks)
+	if result.Error != nil {
+		return result.Error
 	}
-	_, err = c.AddFunc(spec, func() {
-		db.CheckAll(dbClient)
-	})
-	if err != nil {
-		return err
+	for _, check := range checks {
+		chk := check
+		duration, err := time.ParseDuration(check.Frecuency)
+		if err != nil {
+			return err
+		}
+		err = schedRegistry.Register(chk.ID, duration, func() {
+			chk.Check(dbClient)
+		})
+		if err != nil {
+			return err
+		}
 	}
-	c.Start()
 	es := generated.NewExecutableSchema(generated.Config{
 		Resolvers: &resolvers.Resolver{
-			Db: dbClient,
+			Db:       dbClient,
+			Registry: schedRegistry,
 		},
 	})
 	h := handler.New(es)

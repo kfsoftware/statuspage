@@ -104,9 +104,11 @@ input CreateTcpCheckInput {
 }
 type Query {
     checks: [Check!]
+    check(checkId: ID!): Check
     executions(
         checkId: ID!,
         from: Time,
         until: Time
     ): [CheckExecution!]
+    execution(execId: ID!): CheckExecution
 }

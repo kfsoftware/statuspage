@@ -163,6 +163,124 @@ func CheckAll(db *gorm.DB) {
 		}
 	}
 }
+func (c *Check) Check(db *gorm.DB)  {
+	err := c.check(db)
+	if err != nil {
+		log.Warnf("Failed to verify check=%v", err)
+	} else {
+		log.Infof("Verified check successfully %s", c.Identifier)
+	}
+}
+func (c *Check) check(db *gorm.DB) error {
+	c.Status = Checking
+	db.Save(c)
+	var healthChk check.Check
+	switch c.Type {
+	case check.HttpType:
+		httpCheckData, err := c.GetHttpData()
+		if err != nil {
+			log.Errorf("Failed to get http data:%v", err)
+			return err
+		}
+		url := httpCheckData.Url
+		expectedStatusCode := 200
+		healthChk = check.NewHttpCheck(url, &expectedStatusCode)
+	case check.TlsType:
+		tlsCheckData, err := c.GetTlsData()
+		if err != nil {
+			log.Errorf("Failed to get http data:%v", err)
+			return err
+		}
+		address := tlsCheckData.Address
+		var tlsConfig *tls.Config
+		if tlsCheckData.RootCAs != "" {
+			rootCAs, _ := x509.SystemCertPool()
+			if rootCAs == nil {
+				rootCAs = x509.NewCertPool()
+			}
+			ok := rootCAs.AppendCertsFromPEM([]byte(tlsCheckData.RootCAs))
+			if !ok {
+				log.Warnf("Root CAs not valid: %v", ok)
+			}
+			tlsConfig = &tls.Config{
+				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					return nil
+				},
+				VerifyConnection: func(state tls.ConnectionState) error {
+					return nil
+				},
+				RootCAs: rootCAs,
+			}
+		}
+		healthChk = check.NewTlsCheck(address, tlsConfig)
+	case check.IcmpType:
+		icmpCheckData, err := c.GetIcmpData()
+		if err != nil {
+			log.Errorf("Failed to get http data:%v", err)
+			return err
+		}
+		address := icmpCheckData.Address
+		healthChk = check.NewIcmpCheck(address)
+	case check.TcpType:
+		tlsCheckData, err := c.GetTcpData()
+		if err != nil {
+			log.Errorf("Failed to get http data:%v", err)
+			return err
+		}
+		address := tlsCheckData.Address
+		healthChk = check.NewTcpCheck(address)
+	}
+	if healthChk != nil {
+		result := healthChk.Check()
+		var status Status
+		if result.Error != nil {
+			status = Down
+		} else {
+			status = Up
+		}
+		c.Status = status
+		if result.Error != nil {
+			c.ErrorMsg = result.Error.Error()
+		} else {
+			c.ErrorMsg = ""
+		}
+		c.Message = result.Message
+		c.LatestCheck = time.Now()
+
+		statsBytes, err := json.Marshal(result.Statistics)
+		if err != nil {
+			log.Errorf("Health check failed id=%s type=%s err=%v", c.ID, c.Type, err)
+			return err
+		}
+		chkExecution := CheckExecution{
+			ID:      uuid.New().String(),
+			Status:  status,
+			Stats:   statsBytes,
+			CheckID: c.ID,
+		}
+		resultDb := db.Create(&chkExecution)
+		if resultDb.Error != nil {
+			log.Errorf("Health check failed id=%s type=%s err=%v", c.ID, c.Type, resultDb.Error)
+			return result.Error
+		}
+
+		resultDb = db.Save(&c)
+		if resultDb.Error != nil {
+			log.Errorf("Failed to save check id=%s type=%s err=%v", c.ID, c.Type, resultDb.Error)
+			return result.Error
+		}
+		if c.Status == Down {
+			chkToNotify := c
+			go func() {
+				notifyEndpointDown(*chkToNotify)
+			}()
+		}
+	} else {
+		log.Warnf("No healthcheck found for id=%s type=%s", c.ID, string(c.Type))
+	}
+	return nil
+}
+
 func checkAll(db *gorm.DB) error {
 	var checks []Check
 	result := db.Find(&checks)
@@ -172,105 +290,12 @@ func checkAll(db *gorm.DB) error {
 	var wg sync.WaitGroup
 	wg.Add(len(checks))
 	for _, chk := range checks {
-		chk.Status = Checking
-		db.Save(chk)
-		var healthChk check.Check
-		switch chk.Type {
-		case check.HttpType:
-			httpCheckData, err := chk.GetHttpData()
-			if err != nil {
-				log.Errorf("Failed to get http data:%v", err)
-				continue
-			}
-			url := httpCheckData.Url
-			expectedStatusCode := 200
-			healthChk = check.NewHttpCheck(url, &expectedStatusCode)
-		case check.TlsType:
-			tlsCheckData, err := chk.GetTlsData()
-			if err != nil {
-				log.Errorf("Failed to get http data:%v", err)
-				continue
-			}
-			address := tlsCheckData.Address
-			rootCAs, _ := x509.SystemCertPool()
-			if rootCAs == nil {
-				rootCAs = x509.NewCertPool()
-			}
-			if tlsCheckData.RootCAs != "" {
-				ok := rootCAs.AppendCertsFromPEM([]byte(tlsCheckData.RootCAs))
-				if !ok {
-					log.Warnf("Root CAs not valid: %v", ok)
-				}
-			}
-			tlsConfig := &tls.Config{
-				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					return nil
-				},
-				VerifyConnection: func(state tls.ConnectionState) error {
-					return nil
-				},
-				RootCAs: rootCAs,
-			}
-			healthChk = check.NewTlsCheck(address, tlsConfig)
-		case check.IcmpType:
-			icmpCheckData, err := chk.GetIcmpData()
-			if err != nil {
-				log.Errorf("Failed to get http data:%v", err)
-				continue
-			}
-			address := icmpCheckData.Address
-			healthChk = check.NewIcmpCheck(address)
-		case check.TcpType:
-			tlsCheckData, err := chk.GetTcpData()
-			if err != nil {
-				log.Errorf("Failed to get http data:%v", err)
-				continue
-			}
-			address := tlsCheckData.Address
-			healthChk = check.NewTcpCheck(address)
-		}
-		if healthChk != nil {
-			result := healthChk.Check()
-			var status Status
-			if result.Error != nil {
-				status = Down
-			} else {
-				status = Up
-			}
-			statsBytes, err := json.Marshal(result.Statistics)
-			if err != nil {
-				log.Errorf("Health check failed id=%s type=%s err=%v", chk.ID, chk.Type, err)
-				continue
-			}
-			chkExecution := CheckExecution{
-				ID:      uuid.New().String(),
-				Status:  status,
-				Stats:   statsBytes,
-				CheckID: chk.ID,
-			}
-			resultDb := db.Create(&chkExecution)
-			if resultDb.Error != nil {
-				log.Errorf("Health check failed id=%s type=%s err=%v", chk.ID, chk.Type, resultDb.Error)
-			}
-			chk.Status = status
-			if result.Error != nil {
-				chk.ErrorMsg = result.Error.Error()
-			}
-			chk.Message = result.Message
-			chk.LatestCheck = time.Now()
-			resultDb = db.Save(&chk)
-			if resultDb.Error != nil {
-				log.Errorf("Failed to save check id=%s type=%s err=%v", chk.ID, chk.Type, resultDb.Error)
-			}
-			if chk.Status == Down {
-				chkToNotify := chk
-				go func() {
-					notifyEndpointDown(chkToNotify)
-				}()
-			}
-		} else {
-			log.Warnf("No healthcheck found for id=%s type=%s", chk.ID, string(chk.Type))
-		}
+		chk1 := chk
+		go func() {
+			defer wg.Done()
+			chk1.Check(db)
+		}()
 	}
+	wg.Wait()
 	return nil
 }

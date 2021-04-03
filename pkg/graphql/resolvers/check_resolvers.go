@@ -9,12 +9,14 @@ import (
 	"github.com/kfsoftware/statuspage/pkg/db"
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
 	"github.com/kfsoftware/statuspage/pkg/graphql/models"
+	"github.com/kfsoftware/statuspage/pkg/jobs"
 	"gorm.io/gorm"
 	"time"
 )
 
 type Resolver struct {
-	Db *gorm.DB
+	Db       *gorm.DB
+	Registry *jobs.SchedulerRegistry
 }
 
 // Mutation returns generated.MutationResolver implementation.
@@ -42,8 +44,9 @@ func (m mutationResolver) CreateTCPCheck(ctx context.Context, input models.Creat
 	if err != nil {
 		return nil, err
 	}
+	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
-		ID:         uuid.New().String(),
+		ID:         checkId,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		Data:       jsonBytes,
@@ -53,6 +56,10 @@ func (m mutationResolver) CreateTCPCheck(ctx context.Context, input models.Creat
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	err = m.addCheckResult(checkId)
+	if err != nil {
+		return nil, err
+	}
 	return models.TCPCheck{
 		ID:         input.ID,
 		Identifier: input.ID,
@@ -60,7 +67,25 @@ func (m mutationResolver) CreateTCPCheck(ctx context.Context, input models.Creat
 		Address:    input.Address,
 	}, nil
 }
-
+func (m mutationResolver) addCheckResult(id string) error {
+	chk := db.Check{}
+	resultDb := m.Db.First(&chk, "id = ?", id)
+	if resultDb.Error != nil {
+		return resultDb.Error
+	}
+	interval, err := time.ParseDuration(chk.Frecuency)
+	if err != nil {
+		return err
+	}
+	chk.Check(m.Db)
+	err = m.Registry.Register(chk.ID, interval, func() {
+		chk.Check(m.Db)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (m mutationResolver) CreateTLSCheck(ctx context.Context, input models.CreateTLSCheckInput) (models.Check, error) {
 	data := db.TlsCheckData{
 		Address: input.Address,
@@ -74,8 +99,9 @@ func (m mutationResolver) CreateTLSCheck(ctx context.Context, input models.Creat
 	if err != nil {
 		return nil, err
 	}
+	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
-		ID:         uuid.New().String(),
+		ID:         checkId,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		Data:       jsonBytes,
@@ -84,6 +110,10 @@ func (m mutationResolver) CreateTLSCheck(ctx context.Context, input models.Creat
 	})
 	if result.Error != nil {
 		return nil, result.Error
+	}
+	err = m.addCheckResult(checkId)
+	if err != nil {
+		return nil, err
 	}
 	return models.TLSCheck{
 		ID:         input.ID,
@@ -103,8 +133,9 @@ func (m mutationResolver) CreateIcmpCheck(ctx context.Context, input models.Crea
 	if err != nil {
 		return nil, err
 	}
+	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
-		ID:         uuid.New().String(),
+		ID:         checkId,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		Data:       jsonBytes,
@@ -113,6 +144,10 @@ func (m mutationResolver) CreateIcmpCheck(ctx context.Context, input models.Crea
 	})
 	if result.Error != nil {
 		return nil, result.Error
+	}
+	err = m.addCheckResult(checkId)
+	if err != nil {
+		return nil, err
 	}
 	return models.IcmpCheck{
 		ID:         input.ID,
@@ -150,8 +185,9 @@ func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.Crea
 	if err != nil {
 		return nil, err
 	}
+	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
-		ID:         uuid.New().String(),
+		ID:         checkId,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		Data:       jsonBytes,
@@ -161,32 +197,47 @@ func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.Crea
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	err = m.addCheckResult(checkId)
+	if err != nil {
+		return nil, err
+	}
 	return models.HTTPCheck{
 		ID:         input.ID,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		URL:        input.URL,
 	}, nil
-
 }
 
 type queryResolver struct{ *Resolver }
 
+func (q queryResolver) Check(ctx context.Context, checkID string) (models.Check, error) {
+	chk := db.Check{}
+	result := q.Db.First(&chk, "id = ?", checkID)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return mapCheck(chk)
+}
+
+func (q queryResolver) Execution(ctx context.Context, execID string) (*models.CheckExecution, error) {
+	chkExec := db.CheckExecution{}
+	result := q.Db.First(&chkExec, "id = ?", execID)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return mapCheckExecution(chkExec), nil
+}
+
 func (q queryResolver) Executions(ctx context.Context, checkID string, from *time.Time, until *time.Time) ([]*models.CheckExecution, error) {
 	var executions []db.CheckExecution
-	result := q.Db.Where("check_id = ? AND created_at BETWEEN ? AND ?", checkID, from, until).Find(&executions)
+	result := q.Db.Order("created_at desc").Where("check_id = ? AND created_at BETWEEN ? AND ?", checkID, from, until).Find(&executions)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	var modelExecutions []*models.CheckExecution
 	for _, execution := range executions {
-		modelExecutions = append(modelExecutions, &models.CheckExecution{
-			ID:            execution.ID,
-			ExecutionTime: execution.CreatedAt,
-			Message:       execution.Message,
-			ErrorMsg:      execution.ErrorMsg,
-			Status:        string(execution.Status),
-		})
+		modelExecutions = append(modelExecutions, mapCheckExecution(execution))
 	}
 	return modelExecutions, nil
 
@@ -200,72 +251,90 @@ func (q queryResolver) Checks(ctx context.Context) ([]models.Check, error) {
 	}
 	var modelChecks []models.Check
 	for _, chk := range checks {
-		errorMsg := chk.ErrorMsg
-		msg := chk.Message
-		latestCheck := chk.LatestCheck
-		switch chk.Type {
-		case check.HttpType:
-			httpCheckData, err := chk.GetHttpData()
-			if err != nil {
-				return nil, err
-			}
-			modelChecks = append(modelChecks, models.HTTPCheck{
-				ID:          chk.ID,
-				Identifier:  chk.Identifier,
-				Frecuency:   chk.Frecuency,
-				URL:         httpCheckData.Url,
-				Status:      string(chk.Status),
-				LatestCheck: &latestCheck,
-				ErrorMsg:    errorMsg,
-				Message:     msg,
-			})
-		case check.TcpType:
-			tcpCheckData, err := chk.GetTcpData()
-			if err != nil {
-				return nil, err
-			}
-			modelChecks = append(modelChecks, models.TCPCheck{
-				ID:          chk.ID,
-				Identifier:  chk.Identifier,
-				Frecuency:   chk.Frecuency,
-				Address:     tcpCheckData.Address,
-				Status:      string(chk.Status),
-				LatestCheck: &latestCheck,
-				ErrorMsg:    errorMsg,
-				Message:     msg,
-			})
-		case check.TlsType:
-			tlsCheckData, err := chk.GetTlsData()
-			if err != nil {
-				return nil, err
-			}
-			modelChecks = append(modelChecks, models.TCPCheck{
-				ID:          chk.ID,
-				Identifier:  chk.Identifier,
-				Frecuency:   chk.Frecuency,
-				Address:     tlsCheckData.Address,
-				Status:      string(chk.Status),
-				LatestCheck: &latestCheck,
-				ErrorMsg:    errorMsg,
-				Message:     msg,
-			})
-		case check.IcmpType:
-			icmpCheckData, err := chk.GetIcmpData()
-			if err != nil {
-				return nil, err
-			}
-			modelChecks = append(modelChecks, models.TCPCheck{
-				ID:          chk.ID,
-				Identifier:  chk.Identifier,
-				Frecuency:   chk.Frecuency,
-				Address:     icmpCheckData.Address,
-				Status:      string(chk.Status),
-				LatestCheck: &latestCheck,
-				ErrorMsg:    errorMsg,
-				Message:     msg,
-			})
+		modelChk, err := mapCheck(chk)
+		if err != nil {
+			return nil, err
 		}
-
+		modelChecks = append(modelChecks, modelChk)
 	}
 	return modelChecks, nil
+}
+func mapCheckExecution(chkExec db.CheckExecution) *models.CheckExecution {
+	return &models.CheckExecution{
+		ID:            chkExec.ID,
+		ExecutionTime: chkExec.CreatedAt,
+		Message:       chkExec.Message,
+		ErrorMsg:      chkExec.ErrorMsg,
+		Status:        string(chkExec.Status),
+	}
+}
+func mapCheck(chk db.Check) (models.Check, error) {
+	var modelCheck models.Check
+	errorMsg := chk.ErrorMsg
+	msg := chk.Message
+	latestCheck := chk.LatestCheck
+
+	switch chk.Type {
+	case check.HttpType:
+		httpCheckData, err := chk.GetHttpData()
+		if err != nil {
+			return nil, err
+		}
+		modelCheck = models.HTTPCheck{
+			ID:          chk.ID,
+			Identifier:  chk.Identifier,
+			Frecuency:   chk.Frecuency,
+			URL:         httpCheckData.Url,
+			Status:      string(chk.Status),
+			LatestCheck: &latestCheck,
+			ErrorMsg:    errorMsg,
+			Message:     msg,
+		}
+	case check.TcpType:
+		tcpCheckData, err := chk.GetTcpData()
+		if err != nil {
+			return nil, err
+		}
+		modelCheck = models.TCPCheck{
+			ID:          chk.ID,
+			Identifier:  chk.Identifier,
+			Frecuency:   chk.Frecuency,
+			Address:     tcpCheckData.Address,
+			Status:      string(chk.Status),
+			LatestCheck: &latestCheck,
+			ErrorMsg:    errorMsg,
+			Message:     msg,
+		}
+	case check.TlsType:
+		tlsCheckData, err := chk.GetTlsData()
+		if err != nil {
+			return nil, err
+		}
+		modelCheck = models.TCPCheck{
+			ID:          chk.ID,
+			Identifier:  chk.Identifier,
+			Frecuency:   chk.Frecuency,
+			Address:     tlsCheckData.Address,
+			Status:      string(chk.Status),
+			LatestCheck: &latestCheck,
+			ErrorMsg:    errorMsg,
+			Message:     msg,
+		}
+	case check.IcmpType:
+		icmpCheckData, err := chk.GetIcmpData()
+		if err != nil {
+			return nil, err
+		}
+		modelCheck = models.TCPCheck{
+			ID:          chk.ID,
+			Identifier:  chk.Identifier,
+			Frecuency:   chk.Frecuency,
+			Address:     icmpCheckData.Address,
+			Status:      string(chk.Status),
+			LatestCheck: &latestCheck,
+			ErrorMsg:    errorMsg,
+			Message:     msg,
+		}
+	}
+	return modelCheck, nil
 }
