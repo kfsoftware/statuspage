@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	uuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/kfsoftware/statuspage/pkg/check"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -27,19 +27,21 @@ const (
 )
 
 type Check struct {
-	ID          string `gorm:"primaryKey"`
-	Identifier  string `gorm:"uniqueIndex"`
-	Type        check.Type
-	Data        datatypes.JSON
-	Frecuency   string
-	Status      Status
-	ErrorMsg    string
-	Message     string
-	LatestCheck time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   gorm.DeletedAt `gorm:"index"`
-	Executions  []CheckExecution
+	ID                  string `gorm:"primaryKey"`
+	Identifier          string `gorm:"uniqueIndex"`
+	Type                check.Type
+	Data                datatypes.JSON
+	Frecuency           string
+	Status              Status
+	ErrorMsg            string
+	Message             string
+	LatestCheck         time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	DeletedAt           gorm.DeletedAt `gorm:"index"`
+	LastFailureNotified *time.Time
+	FailureCount        int
+	Executions          []CheckExecution
 }
 
 func (c Check) GetIcmpData() (*IcmpCheckData, error) {
@@ -114,7 +116,8 @@ func (CheckExecution) TableName() string {
 }
 
 type HttpCheckData struct {
-	Url string `json:"url"`
+	Url        string `json:"url"`
+	StatusCode int    `json:"status_code"`
 }
 type TlsCheckData struct {
 	Address string `json:"address"`
@@ -127,8 +130,36 @@ type IcmpCheckData struct {
 	Address string `json:"address"`
 }
 
-func notifyEndpointDown(chk Check) {
+func notifyEndpointUp(db *gorm.DB, chk Check) {
 	slackWebhook := viper.GetString("slack.webhook")
+	if slackWebhook != "" && chk.LastFailureNotified != nil {
+		data := map[string]string{}
+		data["text"] = fmt.Sprintf("Endpoint up: %s\n%s", chk.Identifier, chk.ErrorMsg)
+		dataBytes, err := json.Marshal(data)
+		if err != nil {
+			log.Warnf("Error sending notification to slack:%v", err)
+			return
+		}
+		_, err = http.Post(slackWebhook, "application/json", bytes.NewBuffer(dataBytes))
+		if err != nil {
+			log.Warnf("Error sending notification to slack:%v", err)
+			return
+		}
+	}
+	chk.LastFailureNotified = nil
+	chk.FailureCount = 0
+	result := db.Save(chk)
+	if result.Error != nil {
+		log.Warnf("Error saving item :%v", result.Error)
+		return
+	}
+}
+func notifyEndpointDown(db *gorm.DB, chk Check) {
+	slackWebhook := viper.GetString("slack.webhook")
+	if chk.LastFailureNotified != nil && !time.Now().After(chk.LastFailureNotified.Add(5*time.Minute)) {
+		log.Infof("Skip notification since lastFailureNotification was=%v", chk.LastFailureNotified)
+		return
+	}
 	if slackWebhook != "" {
 		data := map[string]string{}
 		data["text"] = fmt.Sprintf("Endpoint down: %s\n%s", chk.Identifier, chk.ErrorMsg)
@@ -142,6 +173,13 @@ func notifyEndpointDown(chk Check) {
 			log.Warnf("Error sending notification to slack:%v", err)
 			return
 		}
+	}
+	now := time.Now()
+	chk.LastFailureNotified = &now
+	chk.FailureCount += 1
+	result := db.Save(chk)
+	if result.Error != nil {
+		log.Errorf("Failed to save check=%v with error=%v", chk, result.Error)
 	}
 }
 
@@ -163,7 +201,7 @@ func CheckAll(db *gorm.DB) {
 		}
 	}
 }
-func (c *Check) Check(db *gorm.DB)  {
+func (c *Check) Check(db *gorm.DB) {
 	err := c.check(db)
 	if err != nil {
 		log.Warnf("Failed to verify check=%v", err)
@@ -172,21 +210,34 @@ func (c *Check) Check(db *gorm.DB)  {
 	}
 }
 func (c *Check) check(db *gorm.DB) error {
-	c.Status = Checking
-	db.Save(c)
+	chk := Check{}
+	resultDb := db.First(&chk, "id = ?", c.ID)
+	if resultDb.Error != nil {
+		return resultDb.Error
+	}
+	chk.Status = Checking
+	resultDb = db.Save(chk)
+	if resultDb.Error != nil {
+		return resultDb.Error
+	}
 	var healthChk check.Check
-	switch c.Type {
+	switch chk.Type {
 	case check.HttpType:
-		httpCheckData, err := c.GetHttpData()
+		httpCheckData, err := chk.GetHttpData()
 		if err != nil {
 			log.Errorf("Failed to get http data:%v", err)
 			return err
 		}
 		url := httpCheckData.Url
-		expectedStatusCode := 200
+		var expectedStatusCode int
+		if httpCheckData.StatusCode == 0 {
+			expectedStatusCode = 200
+		} else {
+			expectedStatusCode = httpCheckData.StatusCode
+		}
 		healthChk = check.NewHttpCheck(url, &expectedStatusCode)
 	case check.TlsType:
-		tlsCheckData, err := c.GetTlsData()
+		tlsCheckData, err := chk.GetTlsData()
 		if err != nil {
 			log.Errorf("Failed to get http data:%v", err)
 			return err
@@ -214,7 +265,7 @@ func (c *Check) check(db *gorm.DB) error {
 		}
 		healthChk = check.NewTlsCheck(address, tlsConfig)
 	case check.IcmpType:
-		icmpCheckData, err := c.GetIcmpData()
+		icmpCheckData, err := chk.GetIcmpData()
 		if err != nil {
 			log.Errorf("Failed to get http data:%v", err)
 			return err
@@ -222,7 +273,7 @@ func (c *Check) check(db *gorm.DB) error {
 		address := icmpCheckData.Address
 		healthChk = check.NewIcmpCheck(address)
 	case check.TcpType:
-		tlsCheckData, err := c.GetTcpData()
+		tlsCheckData, err := chk.GetTcpData()
 		if err != nil {
 			log.Errorf("Failed to get http data:%v", err)
 			return err
@@ -238,45 +289,51 @@ func (c *Check) check(db *gorm.DB) error {
 		} else {
 			status = Up
 		}
-		c.Status = status
+		chk.Status = status
 		if result.Error != nil {
-			c.ErrorMsg = result.Error.Error()
+			chk.ErrorMsg = result.Error.Error()
 		} else {
-			c.ErrorMsg = ""
+			chk.ErrorMsg = ""
 		}
-		c.Message = result.Message
-		c.LatestCheck = time.Now()
+		chk.Message = result.Message
+		chk.LatestCheck = time.Now()
 
 		statsBytes, err := json.Marshal(result.Statistics)
 		if err != nil {
-			log.Errorf("Health check failed id=%s type=%s err=%v", c.ID, c.Type, err)
+			log.Errorf("Health check failed id=%s type=%s err=%v", chk.ID, chk.Type, err)
 			return err
 		}
 		chkExecution := CheckExecution{
 			ID:      uuid.New().String(),
 			Status:  status,
 			Stats:   statsBytes,
-			CheckID: c.ID,
+			CheckID: chk.ID,
 		}
 		resultDb := db.Create(&chkExecution)
 		if resultDb.Error != nil {
-			log.Errorf("Health check failed id=%s type=%s err=%v", c.ID, c.Type, resultDb.Error)
+			log.Errorf("Health check failed id=%s type=%s err=%v", chk.ID, chk.Type, resultDb.Error)
 			return result.Error
 		}
 
-		resultDb = db.Save(&c)
+		resultDb = db.Save(&chk)
 		if resultDb.Error != nil {
-			log.Errorf("Failed to save check id=%s type=%s err=%v", c.ID, c.Type, resultDb.Error)
+			log.Errorf("Failed to save check id=%s type=%s err=%v", chk.ID, chk.Type, resultDb.Error)
 			return result.Error
 		}
-		if c.Status == Down {
-			chkToNotify := c
-			go func() {
-				notifyEndpointDown(*chkToNotify)
-			}()
+		if chk.Status == Down {
+			notifyEndpointDown(db, chk)
+		} else {
+			notifyEndpointUp(db, chk)
 		}
 	} else {
-		log.Warnf("No healthcheck found for id=%s type=%s", c.ID, string(c.Type))
+		log.Warnf("No healthcheck found for id=%s type=%s", chk.ID, string(chk.Type))
+	}
+	checkUrl := viper.GetString("check.url")
+	if checkUrl != "" {
+		_, err := http.Get(checkUrl)
+		if err != nil {
+			log.Errorf("Failed invoking url: %s", checkUrl)
+		}
 	}
 	return nil
 }

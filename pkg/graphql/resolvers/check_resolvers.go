@@ -10,6 +10,7 @@ import (
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
 	"github.com/kfsoftware/statuspage/pkg/graphql/models"
 	"github.com/kfsoftware/statuspage/pkg/jobs"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"time"
 )
@@ -43,6 +44,18 @@ func (m mutationResolver) CreateTCPCheck(ctx context.Context, input models.Creat
 	_, err = time.ParseDuration(input.Frecuency)
 	if err != nil {
 		return nil, err
+	}
+	chk := db.Check{}
+	resultDb := m.Db.First(&chk, "identifier = ?", input.ID)
+	if resultDb.Error == nil {
+		log.Infof("Check %s exists", input.ID)
+		chk.Data = jsonBytes
+		chk.Frecuency = input.Frecuency
+		resultDb = m.Db.Save(chk)
+		if resultDb.Error != nil {
+			return nil, resultDb.Error
+		}
+		return mapCheck(chk)
 	}
 	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
@@ -99,6 +112,19 @@ func (m mutationResolver) CreateTLSCheck(ctx context.Context, input models.Creat
 	if err != nil {
 		return nil, err
 	}
+	chk := db.Check{}
+	resultDb := m.Db.First(&chk, "identifier = ?", input.ID)
+	if resultDb.Error == nil {
+		log.Infof("Check %s exists", input.ID)
+		chk.Data = jsonBytes
+		chk.Frecuency = input.Frecuency
+		resultDb = m.Db.Save(chk)
+		if resultDb.Error != nil {
+			return nil, resultDb.Error
+		}
+		return mapCheck(chk)
+	}
+
 	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
 		ID:         checkId,
@@ -133,6 +159,18 @@ func (m mutationResolver) CreateIcmpCheck(ctx context.Context, input models.Crea
 	if err != nil {
 		return nil, err
 	}
+	chk := db.Check{}
+	resultDb := m.Db.First(&chk, "identifier = ?", input.ID)
+	if resultDb.Error == nil {
+		log.Infof("Check %s exists", input.ID)
+		chk.Data = jsonBytes
+		chk.Frecuency = input.Frecuency
+		resultDb = m.Db.Save(chk)
+		if resultDb.Error != nil {
+			return nil, resultDb.Error
+		}
+		return mapCheck(chk)
+	}
 	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
 		ID:         checkId,
@@ -150,7 +188,7 @@ func (m mutationResolver) CreateIcmpCheck(ctx context.Context, input models.Crea
 		return nil, err
 	}
 	return models.IcmpCheck{
-		ID:         input.ID,
+		ID:         checkId,
 		Identifier: input.ID,
 		Frecuency:  input.Frecuency,
 		Address:    input.Address,
@@ -159,7 +197,7 @@ func (m mutationResolver) CreateIcmpCheck(ctx context.Context, input models.Crea
 
 func (m mutationResolver) DeleteCheck(ctx context.Context, id string) (*models.DeleteResponse, error) {
 	chk := db.Check{}
-	result := m.Db.Find(&chk, "id = ?", id)
+	result := m.Db.First(&chk, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -172,11 +210,15 @@ func (m mutationResolver) DeleteCheck(ctx context.Context, id string) (*models.D
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	err := m.Registry.Unregister(id)
+	if err != nil {
+		return nil, err
+	}
 	return &models.DeleteResponse{ID: id}, nil
 }
 
 func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.CreateHTTPCheckInput) (models.Check, error) {
-	data := db.HttpCheckData{Url: input.URL}
+	data := db.HttpCheckData{Url: input.URL, StatusCode: input.StatusCode}
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
@@ -185,6 +227,19 @@ func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.Crea
 	if err != nil {
 		return nil, err
 	}
+	chk := db.Check{}
+	resultDb := m.Db.First(&chk, "identifier = ?", input.ID)
+	if resultDb.Error == nil {
+		log.Infof("Check %s exists", input.ID)
+		chk.Data = jsonBytes
+		chk.Frecuency = input.Frecuency
+		resultDb = m.Db.Save(chk)
+		if resultDb.Error != nil {
+			return nil, resultDb.Error
+		}
+		return mapCheck(chk)
+	}
+
 	checkId := uuid.New().String()
 	result := m.Db.Create(&db.Check{
 		ID:         checkId,

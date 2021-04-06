@@ -39,6 +39,7 @@ func (h HttpCheck) Check()  Result {
 		result.Message = err.Error()
 		return result
 	}
+	defer resp.Body.Close()
 	statistics.StatusCode = resp.StatusCode
 	statistics.ContentLength = resp.ContentLength
 	statistics.Headers = map[string][]string{}

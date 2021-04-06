@@ -19,9 +19,10 @@ type CheckExecution struct {
 }
 
 type CreateHTTPCheckInput struct {
-	ID        string `json:"id"`
-	Frecuency string `json:"frecuency"`
-	URL       string `json:"url"`
+	ID         string `json:"id"`
+	Frecuency  string `json:"frecuency"`
+	URL        string `json:"url"`
+	StatusCode int    `json:"statusCode"`
 }
 
 type CreateIcmpCheckInput struct {

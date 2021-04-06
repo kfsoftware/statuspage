@@ -668,6 +668,7 @@ input CreateHttpCheckInput {
     id: String!
     frecuency: String!
     url: String!
+    statusCode: Int!
 }
 type DeleteResponse {
     id: ID!
@@ -3840,6 +3841,14 @@ func (ec *executionContext) unmarshalInputCreateHttpCheckInput(ctx context.Conte
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("url"))
 			it.URL, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "statusCode":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusCode"))
+			it.StatusCode, err = ec.unmarshalNInt2int(ctx, v)
 			if err != nil {
 				return it, err
 			}

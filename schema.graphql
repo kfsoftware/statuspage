@@ -68,6 +68,7 @@ input CreateHttpCheckInput {
     id: String!
     frecuency: String!
     url: String!
+    statusCode: Int!
 }
 type DeleteResponse {
     id: ID!

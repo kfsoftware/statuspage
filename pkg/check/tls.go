@@ -42,13 +42,7 @@ func (h TlsCheck) Check() Result {
 		return result
 	}
 	defer conn.Close()
-	err = conn.Handshake()
-	if err != nil {
-		result.Statistics = statistics
-		result.Error = err
-		result.Message = err.Error()
-		return result
-	}
+	defer conn.CloseWrite()
 	err = conn.Handshake()
 	if err != nil {
 		result.Statistics = statistics

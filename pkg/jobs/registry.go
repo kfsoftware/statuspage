@@ -13,10 +13,6 @@ type SchedulerRegistry struct {
 	m    sync.Mutex
 }
 
-var DefaultSchedulerRegistry = NewSchedulerRegistry(
-	time.Local,
-)
-
 func NewSchedulerRegistry(tz *time.Location) *SchedulerRegistry {
 	c := cron.New(
 		cron.WithSeconds(),
@@ -46,8 +42,8 @@ func (r *SchedulerRegistry) Unregister(id string) error {
 	r.m.Lock()
 	defer r.m.Unlock()
 	entryId, exists := r.jobs[id]
-	if exists {
-		return errors.Errorf("Job already exists for %s", id)
+	if !exists {
+		return errors.Errorf("Job doesn't exist for %s", id)
 	}
 	r.cron.Remove(entryId)
 	return nil

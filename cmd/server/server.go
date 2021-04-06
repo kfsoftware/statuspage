@@ -7,12 +7,13 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/kfsoftware/statuspage/pkg/db"
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
 	"github.com/kfsoftware/statuspage/pkg/graphql/resolvers"
 	"github.com/kfsoftware/statuspage/pkg/jobs"
+	"github.com/newrelic/go-agent/v3/integrations/nrlogrus"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 )
 
@@ -61,8 +63,6 @@ func (s *serverCmd) run() error {
 		return errors.Errorf("No valid provider: %s", provider)
 	}
 
-	r := gin.Default()
-
 	schedRegistry := jobs.NewSchedulerRegistry(
 		time.Local,
 	)
@@ -92,8 +92,26 @@ func (s *serverCmd) run() error {
 			Registry: schedRegistry,
 		},
 	})
-	h := handler.New(es)
+	var app *newrelic.Application
+	viper.SetDefault("newrelic.name", "Status Page")
+	newRelicLicense := viper.GetString("newrelic.license")
+	if newRelicLicense != "" {
+		appName := viper.GetString("newrelic.name")
+		app, err = newrelic.NewApplication(
+			newrelic.ConfigAppName(appName),
+			newrelic.ConfigLicense(newRelicLicense),
+			newrelic.ConfigDistributedTracerEnabled(true),
+			func(config *newrelic.Config) {
+				log.SetLevel(log.WarnLevel)
+				config.Logger = nrlogrus.StandardLogger()
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
 
+	h := handler.New(es)
 	h.AddTransport(transport.Websocket{
 		KeepAlivePingInterval: 10 * time.Second,
 		Upgrader:              wsupgrader,
@@ -110,19 +128,44 @@ func (s *serverCmd) run() error {
 	})
 	h.Use(apollotracing.Tracer{})
 
-	r.Any("/graphql",
-		func(c *gin.Context) {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Identity")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-			h.ServeHTTP(c.Writer, c.Request)
-		},
-	)
+	graphqlHandler := func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Identity")
+		writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+		h.ServeHTTP(writer, request)
+	}
+	if app != nil {
+		http.HandleFunc(
+			newrelic.WrapHandleFunc(
+				app,
+				"/graphql",
+				graphqlHandler,
+			),
+		)
+	} else {
+		http.HandleFunc(
+			"/graphql",
+			graphqlHandler,
+		)
+	}
 	playgroundHandler := playground.Handler("GraphQL", "/graphql")
-	r.GET("/playground", func(c *gin.Context) {
-		playgroundHandler.ServeHTTP(c.Writer, c.Request)
-	})
+	pgroundHandler := func(writer http.ResponseWriter, request *http.Request) {
+		playgroundHandler.ServeHTTP(writer, request)
+	}
+	if app != nil {
+		http.HandleFunc(
+			newrelic.WrapHandleFunc(app, "/playground",
+				pgroundHandler,
+			),
+		)
+	} else {
+		http.HandleFunc(
+			"/playground",
+			playgroundHandler,
+		)
+	}
+
 	listenAddr := s.addr
 	if listenAddr == "" {
 		listenAddr = viper.GetString("address")
@@ -130,7 +173,7 @@ func (s *serverCmd) run() error {
 	if listenAddr == "" {
 		listenAddr = "0.0.0.0:80"
 	}
-	err = r.Run(listenAddr)
+	err = http.ListenAndServe(listenAddr, nil)
 	if err != nil {
 		return err
 	}
@@ -172,7 +215,7 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 	var dbClient *gorm.DB
 	var err error
 	newLogger := logger.New(
-		log.New(),
+		log.StandardLogger(),
 		logger.Config{
 			SlowThreshold: time.Second,
 			LogLevel:      logger.Silent,
