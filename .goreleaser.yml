@@ -39,10 +39,10 @@ dockers:
     goarch: amd64
     dockerfile: Dockerfile
     image_templates:
-      - "quay.io/kfsoftware/statuspage:{{ .Tag }}"
-      - "quay.io/kfsoftware/statuspage:v{{ .Major }}"
-      - "quay.io/kfsoftware/statuspage:v{{ .Major }}.{{ .Minor }}"
-      - "quay.io/kfsoftware/statuspage:latest"
+      - "ghcr.io/kfsoftware/statuspage:{{ .Tag }}"
+      - "ghcr.io/kfsoftware/statuspage:v{{ .Major }}"
+      - "ghcr.io/kfsoftware/statuspage:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/kfsoftware/statuspage:latest"
 
     extra_files:
       - LICENSE
