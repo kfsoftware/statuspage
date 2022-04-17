@@ -205,7 +205,9 @@ func newDbStorage(driverName config.DriverName, dataSourceName string) (*gorm.DB
 			return nil, err
 		}
 	case config.SQLiteDriver:
-		dbClient, err = gorm.Open(sqlite.Open("gorm.db"), gormConfig)
+		viper.SetDefault("sqlite.path", "./db.sqlite")
+		sqlitePath := viper.GetString("sqlite.path")
+		dbClient, err = gorm.Open(sqlite.Open(sqlitePath), gormConfig)
 		if err != nil {
 			return nil, err
 		}
