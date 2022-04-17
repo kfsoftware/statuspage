@@ -72,13 +72,45 @@ func (c applyCmd) run() error {
 		if err != nil {
 			return err
 		}
+		var checkFiles []string
+		var statusPageFiles []string
 		for _, file := range files {
-			log.Infof("Applying file %s", file.Name())
-			err = c.applyFile(fmt.Sprintf("%s/%s", c.folder, file.Name()))
+			fileBytes, err := readFile(fmt.Sprintf("%s/%s", c.folder, file.Name()))
 			if err != nil {
 				return err
 			}
-			log.Infof("File %s applied", file.Name())
+			var initialUnmarshall struct {
+				Kind StatusKind `yaml:"kind"`
+			}
+			err = yaml.Unmarshal(fileBytes, &initialUnmarshall)
+			if err != nil {
+				return err
+			}
+			log.Debugf("Kind: %s", initialUnmarshall.Kind)
+			switch initialUnmarshall.Kind {
+			case HttpHealthCheck:
+				checkFiles = append(checkFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
+			case TLSHealthCheck:
+				checkFiles = append(checkFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
+			case StatusPageKind:
+				statusPageFiles = append(statusPageFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
+			default:
+				return errors.Errorf("Unknown kind: %s", initialUnmarshall.Kind)
+			}
+		}
+		for _, file := range checkFiles {
+			err = c.applyFile(file)
+			if err != nil {
+				return err
+			}
+			log.Infof("File %s applied", file)
+		}
+		for _, file := range statusPageFiles {
+			err = c.applyFile(file)
+			if err != nil {
+				return err
+			}
+			log.Infof("File %s applied", file)
 		}
 	}
 	return nil

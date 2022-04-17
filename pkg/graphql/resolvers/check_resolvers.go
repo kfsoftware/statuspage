@@ -13,6 +13,7 @@ import (
 	"github.com/kfsoftware/statuspage/pkg/jobs"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
+	"strings"
 	"time"
 )
 
@@ -582,6 +583,9 @@ func (q queryResolver) StatusPage(ctx context.Context, slug string) (*models.Sta
 	statusPage := db.StatusPage{}
 	result := q.Db.Preload("Namespace").First(&statusPage, "slug = ?", slug)
 	if result.Error != nil {
+		if strings.Contains(result.Error.Error(), "not found") {
+			return nil, nil
+		}
 		return nil, result.Error
 	}
 	return mapStatusPage(statusPage)

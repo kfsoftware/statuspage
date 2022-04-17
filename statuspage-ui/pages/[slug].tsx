@@ -1,21 +1,16 @@
 import * as reactSolidIcons from "@heroicons/react/solid";
 import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  SearchIcon,
-  SortAscendingIcon,
+  CheckCircleIcon, SearchIcon
 } from "@heroicons/react/solid";
 import type { GetStaticPropsContext, NextPage } from "next";
 import Head from "next/head";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import client from "../apollo/client";
 import {
   StatusPageDocument,
   StatusPageQuery,
-  StatusPageQueryVariables,
-  StatusPagesQuery,
-  StatusPagesDocument,
-  StatusPagesQueryVariables,
+  StatusPageQueryVariables, StatusPagesDocument, StatusPagesQuery, StatusPagesQueryVariables
 } from "../operations";
 
 const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
@@ -23,12 +18,49 @@ const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
   const services = useMemo(
     () =>
       search
-        ? statusPage.services!.filter((i) =>
+        ? statusPage?.services?.filter((i) =>
             i.name.toLowerCase().includes(search.toLowerCase())
-          )
-        : statusPage.services!,
+          ) || []
+        : statusPage?.services || [],
     [statusPage, search]
   );
+  if (!statusPage) {
+    return (
+      <>
+        <Head>
+          <title>Status page not found</title>
+        </Head>
+        <div className="h-screen">
+          <div className="bg-white min-h-full px-4 py-16 sm:px-6 sm:py-24 md:grid md:place-items-center lg:px-8">
+            <div className="max-w-max mx-auto">
+              <main className="sm:flex">
+                <p className="text-4xl font-extrabold text-indigo-600 sm:text-5xl">
+                  404
+                </p>
+                <div className="sm:ml-6">
+                  <div className="sm:border-l sm:border-gray-200 sm:pl-6">
+                    <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight sm:text-5xl">
+                      Page not found
+                    </h1>
+                    <p className="mt-1 text-base text-gray-500">
+                      Please check the URL in the address bar and try again.
+                    </p>
+                  </div>
+                  <div className="mt-10 flex space-x-3 sm:border-l sm:border-transparent sm:pl-6">
+                    <Link href="/">
+                      <a className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Go back home
+                      </a>
+                    </Link>
+                  </div>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <Head>
@@ -42,18 +74,37 @@ const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
             </h2>
           </div>
         </div>
-        <div className="rounded-md bg-green-50 p-4 mt-8">
+        <div
+          className={`rounded-md ${
+            statusPage.status.code === StatusCode.UP
+              ? "bg-green-50"
+              : "bg-red-50"
+          } p-4 mt-8`}
+        >
           <div className="flex">
             <div className="flex-shrink-0">
-              <CheckCircleIcon
-                className="h-5 w-5 text-green-400"
-                aria-hidden="true"
-              />
+              {statusPage.status.code === StatusCode.UP ? (
+                <CheckCircleIcon
+                  className="h-5 w-5 text-green-400"
+                  aria-hidden="true"
+                />
+              ) : (
+                <reactSolidIcons.XCircleIcon
+                  className="h-5 w-5 text-red-400"
+                  aria-hidden="true"
+                />
+              )}
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-green-800">
-                {statusPage.status.message}
-              </p>
+              {statusPage.status.code === StatusCode.UP ? (
+                <p className="text-sm font-medium text-green-800">
+                  {statusPage.status.message}
+                </p>
+              ) : (
+                <p className="text-sm font-medium text-red-800">
+                  {statusPage.status.message}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -111,9 +162,15 @@ const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
                         {service.name}
                       </p>
                       <div className="ml-2 flex-shrink-0 flex">
-                        <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          {service.uptime}
-                        </p>
+                        {service.status === "UP" ? (
+                          <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            {service.uptime}
+                          </p>
+                        ) : (
+                          <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                            {service.uptime}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 sm:flex sm:justify-between">
@@ -143,7 +200,11 @@ const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
                           <span
                             title={check.time}
                             key={idx}
-                            className="h-4 w-1 m-0.5 bg-green-400 rounded hover:scale-150"
+                            className={
+                              check.status === "UP"
+                                ? "h-4 w-1 m-0.5 bg-green-400 rounded hover:scale-150"
+                                : "h-4 w-1 m-0.5 bg-red-400 rounded hover:scale-150"
+                            }
                           ></span>
                         ))}
                       </div>
@@ -170,6 +231,7 @@ interface StatusPage {
     code: StatusCode;
   };
   services: {
+    status: "UP" | "DOWN";
     name: string;
     uptime: string;
     tags: {
@@ -437,18 +499,24 @@ export async function getStaticProps({
       slug: params?.slug!,
     },
   });
+  if (!data.statusPage) {
+    return { props: { statusPage: null }, revalidate: 60 };
+  }
   const statusPageResult = data.statusPage!;
   const status = {
     message: statusPageResult.checks?.every((i) => i.status === "UP")
       ? "All services are up"
       : "Some services are down",
     emoji: "🎉",
-    code: StatusCode.UP,
+    code: statusPageResult.checks?.every((i) => i.status === "UP")
+      ? StatusCode.UP
+      : StatusCode.DOWN,
   };
   const statusPage: StatusPage = {
     title: statusPageResult.title,
     services: statusPageResult.checks!.map((check) => {
       return {
+        status: check.status as "UP" | "DOWN",
         latestChecks: check.latestExecutions!.map((execution) => {
           return {
             time: execution.executionTime!,

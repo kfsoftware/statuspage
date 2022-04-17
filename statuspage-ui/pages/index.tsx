@@ -45,11 +45,17 @@ const Home: NextPage<{ query: StatusPagesQuery }> = ({ query }) => {
                           {statusPage.title}
                         </p>
                         <div className="ml-2 flex-shrink-0 flex">
-                          <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            {statusPage.checks?.every((i) => i.status === "UP")
-                              ? "Up"
-                              : "Down"}
-                          </p>
+                          {statusPage.checks?.every(
+                            (i) => i.status === "UP"
+                          ) ? (
+                            <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                              All services are up
+                            </p>
+                          ) : (
+                            <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                              Some services are down
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
