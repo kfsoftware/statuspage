@@ -19,6 +19,7 @@ require (
 	github.com/spf13/viper v1.7.0
 	github.com/vektah/gqlparser/v2 v2.4.0
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	gorm.io/datatypes v1.0.0
 	gorm.io/driver/mysql v1.0.5
 	gorm.io/driver/postgres v1.0.8

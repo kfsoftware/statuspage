@@ -104,7 +104,8 @@ type ComplexityRoot struct {
 		CreateStatusPage func(childComplexity int, input models.CreateStatusPageInput) int
 		CreateTCPCheck   func(childComplexity int, input models.CreateTCPCheckInput) int
 		CreateTLSCheck   func(childComplexity int, input models.CreateTLSCheckInput) int
-		DeleteCheck      func(childComplexity int, id string) int
+		DeleteCheck      func(childComplexity int, name string, namespace string) int
+		DeleteStatusPage func(childComplexity int, name string, namespace string) int
 		Poll             func(childComplexity int) int
 	}
 
@@ -187,7 +188,8 @@ type MutationResolver interface {
 	CreateTLSCheck(ctx context.Context, input models.CreateTLSCheckInput) (models.Check, error)
 	CreateICMPCheck(ctx context.Context, input models.CreateICMPCheckInput) (models.Check, error)
 	CreateStatusPage(ctx context.Context, input models.CreateStatusPageInput) (*models.StatusPage, error)
-	DeleteCheck(ctx context.Context, id string) (*models.DeleteResponse, error)
+	DeleteCheck(ctx context.Context, name string, namespace string) (*models.DeleteResponse, error)
+	DeleteStatusPage(ctx context.Context, name string, namespace string) (*models.DeleteResponse, error)
 }
 type QueryResolver interface {
 	StatusPage(ctx context.Context, slug string) (*models.StatusPage, error)
@@ -551,7 +553,19 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.DeleteCheck(childComplexity, args["id"].(string)), true
+		return e.complexity.Mutation.DeleteCheck(childComplexity, args["name"].(string), args["namespace"].(string)), true
+
+	case "Mutation.deleteStatusPage":
+		if e.complexity.Mutation.DeleteStatusPage == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteStatusPage_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeleteStatusPage(childComplexity, args["name"].(string), args["namespace"].(string)), true
 
 	case "Mutation.poll":
 		if e.complexity.Mutation.Poll == nil {
@@ -1092,7 +1106,8 @@ type Mutation {
     createTlsCheck(input: CreateTlsCheckInput!): Check!
     createIcmpCheck(input: CreateIcmpCheckInput!): Check!
     createStatusPage(input: CreateStatusPageInput!): StatusPage!
-    deleteCheck(id: ID!): DeleteResponse!
+    deleteCheck(name: String!, namespace: String!): DeleteResponse!
+    deleteStatusPage(name: String!, namespace: String!): DeleteResponse!
 }
 type StatusPage {
     id: ID!
@@ -1312,14 +1327,47 @@ func (ec *executionContext) field_Mutation_deleteCheck_args(ctx context.Context,
 	var err error
 	args := map[string]interface{}{}
 	var arg0 string
-	if tmp, ok := rawArgs["id"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-		arg0, err = ec.unmarshalNID2string(ctx, tmp)
+	if tmp, ok := rawArgs["name"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["id"] = arg0
+	args["name"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["namespace"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("namespace"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["namespace"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteStatusPage_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["name"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["name"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["namespace"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("namespace"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["namespace"] = arg1
 	return args, nil
 }
 
@@ -3018,7 +3066,49 @@ func (ec *executionContext) _Mutation_deleteCheck(ctx context.Context, field gra
 	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().DeleteCheck(rctx, args["id"].(string))
+		return ec.resolvers.Mutation().DeleteCheck(rctx, args["name"].(string), args["namespace"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*models.DeleteResponse)
+	fc.Result = res
+	return ec.marshalNDeleteResponse2ᚖgithubᚗcomᚋkfsoftwareᚋstatuspageᚋpkgᚋgraphqlᚋmodelsᚐDeleteResponse(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Mutation_deleteStatusPage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   true,
+		IsResolver: true,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Mutation_deleteStatusPage_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().DeleteStatusPage(rctx, args["name"].(string), args["namespace"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -6611,6 +6701,16 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteCheck":
 			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteCheck(ctx, field)
+			}
+
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, innerFunc)
+
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "deleteStatusPage":
+			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteStatusPage(ctx, field)
 			}
 
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, innerFunc)

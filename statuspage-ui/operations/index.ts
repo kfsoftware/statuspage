@@ -161,6 +161,7 @@ export type Mutation = {
   createTcpCheck: Check;
   createTlsCheck: Check;
   deleteCheck: DeleteResponse;
+  deleteStatusPage: DeleteResponse;
   poll?: Maybe<PollResult>;
 };
 
@@ -191,7 +192,14 @@ export type MutationCreateTlsCheckArgs = {
 
 
 export type MutationDeleteCheckArgs = {
-  id: Scalars['ID'];
+  name: Scalars['String'];
+  namespace: Scalars['String'];
+};
+
+
+export type MutationDeleteStatusPageArgs = {
+  name: Scalars['String'];
+  namespace: Scalars['String'];
 };
 
 export type Namespace = {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/kfsoftware/statuspage/cmd/apply"
+	"github.com/kfsoftware/statuspage/cmd/del"
 	"github.com/kfsoftware/statuspage/cmd/server"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,7 @@ func NewCmdStatusPage() *cobra.Command {
 	cmd.AddCommand(
 		server.NewServerCmd(),
 		apply.NewApplyCMD(),
+		del.NewDeleteCMD(),
 	)
 
 	return cmd

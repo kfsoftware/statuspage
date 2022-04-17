@@ -51,6 +51,7 @@ type StatusPage struct {
 	Checks      []PageCheck `gorm:"foreignKey:StatusPageID"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
 }
 
 func (StatusPage) TableName() string {

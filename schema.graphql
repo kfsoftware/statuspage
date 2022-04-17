@@ -124,7 +124,8 @@ type Mutation {
     createTlsCheck(input: CreateTlsCheckInput!): Check!
     createIcmpCheck(input: CreateIcmpCheckInput!): Check!
     createStatusPage(input: CreateStatusPageInput!): StatusPage!
-    deleteCheck(id: ID!): DeleteResponse!
+    deleteCheck(name: String!, namespace: String!): DeleteResponse!
+    deleteStatusPage(name: String!, namespace: String!): DeleteResponse!
 }
 type StatusPage {
     id: ID!

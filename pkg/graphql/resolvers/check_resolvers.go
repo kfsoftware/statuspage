@@ -171,6 +171,72 @@ func (s statusPageResolver) Checks(ctx context.Context, obj *models.StatusPage) 
 
 type mutationResolver struct{ *Resolver }
 
+func (m mutationResolver) DeleteStatusPage(ctx context.Context, name string, namespace string) (*models.DeleteResponse, error) {
+	statusPage := db.StatusPage{}
+	ns, err := m.createNamespaceIfNotExists(namespace)
+	if err != nil {
+		return nil, err
+	}
+	result := m.Db.Find(&statusPage, "name = ? AND namespace_id = ?", name, ns.ID)
+	if result.Error != nil {
+		if strings.Contains(result.Error.Error(), "not found") {
+			return &models.DeleteResponse{ID: ""}, nil
+		}
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return &models.DeleteResponse{ID: ""}, nil
+	}
+	statusPage.Name = fmt.Sprintf("deleted__%s", statusPage.Name)
+	statusPage.Slug = fmt.Sprintf("deleted__%s", statusPage.Slug)
+	result = m.Db.Save(&statusPage)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	result = m.Db.Delete(&statusPage)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &models.DeleteResponse{ID: statusPage.ID}, nil
+}
+
+func (m mutationResolver) DeleteCheck(ctx context.Context, name string, namespace string) (*models.DeleteResponse, error) {
+	chk := db.Check{}
+	ns, err := m.createNamespaceIfNotExists(namespace)
+	if err != nil {
+		return nil, err
+	}
+	result := m.Db.Find(&chk, "name = ? AND namespace_id = ?", name, ns.ID)
+	if result.Error != nil {
+		if strings.Contains(result.Error.Error(), "not found") {
+			return &models.DeleteResponse{ID: ""}, nil
+		}
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return &models.DeleteResponse{ID: ""}, nil
+	}
+	chk.Name = fmt.Sprintf("deleted__%s", chk.Name)
+	result = m.Db.Save(&chk)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	result = m.Db.Delete(&chk)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	var pageChecks []db.PageCheck
+	result = m.Db.Where("check_id = ?", chk.ID).Delete(&pageChecks)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	err = m.Registry.Unregister(chk.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.DeleteResponse{ID: chk.ID}, nil
+}
+
 func (m mutationResolver) CreateStatusPage(ctx context.Context, input models.CreateStatusPageInput) (*models.StatusPage, error) {
 	data := db.StatusPageData{
 		OrderChecks: input.CheckSlugs,
@@ -473,28 +539,6 @@ func (m mutationResolver) CreateICMPCheck(ctx context.Context, input models.Crea
 		Frecuency: input.Frecuency,
 		Address:   input.Address,
 	}, nil
-}
-
-func (m mutationResolver) DeleteCheck(ctx context.Context, id string) (*models.DeleteResponse, error) {
-	chk := db.Check{}
-	result := m.Db.First(&chk, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	chk.Name = fmt.Sprintf("%s-%s-%s", chk.Name, "deleted", uuid.New().String())
-	result = m.Db.Save(&chk)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	result = m.Db.Delete(&chk)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	err := m.Registry.Unregister(id)
-	if err != nil {
-		return nil, err
-	}
-	return &models.DeleteResponse{ID: id}, nil
 }
 
 func (m mutationResolver) CreateHTTPCheck(ctx context.Context, input models.CreateHTTPCheckInput) (models.Check, error) {

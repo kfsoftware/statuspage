@@ -3,17 +3,15 @@ package apply
 import (
 	"context"
 	"fmt"
+	"github.com/kfsoftware/statuspage/cmd/cmdutils"
 	"github.com/kfsoftware/statuspage/config"
 	"github.com/kfsoftware/statuspage/pkg/graphql/models"
 	"github.com/pkg/errors"
 	"github.com/shurcooL/graphql"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/oauth2"
 	"io/ioutil"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"net/http"
-	"os"
 )
 
 type applyCmd struct {
@@ -26,43 +24,25 @@ func (c applyCmd) validate() error {
 	return nil
 }
 
-func readFile(f string) ([]byte, error) {
-	fileBytes, err := ioutil.ReadFile(f)
-	return fileBytes, err
-}
-
-type StatusKind string
-
-const (
-	HttpHealthCheck StatusKind = "HttpHealthCheck"
-	TLSHealthCheck  StatusKind = "TLSHealthCheck"
-	StatusPageKind  StatusKind = "StatusPage"
-)
-
 func (c applyCmd) applyFile(filePath string) error {
-	fileBytes, err := readFile(filePath)
+	fileBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
-	var initialUnmarshall struct {
-		Kind StatusKind `yaml:"kind"`
-	}
-	err = yaml.Unmarshal(fileBytes, &initialUnmarshall)
+	statusKind, err := cmdutils.GetFileType(fileBytes)
 	if err != nil {
 		return err
 	}
-	log.Debugf("Kind: %s", initialUnmarshall.Kind)
-	switch initialUnmarshall.Kind {
-	case HttpHealthCheck:
+	switch statusKind {
+	case cmdutils.HttpHealthCheck:
 		return c.applyHttpHealthCheck(fileBytes)
-	case TLSHealthCheck:
+	case cmdutils.TLSHealthCheck:
 		return c.applyTLSHealthCheck(fileBytes)
-	case StatusPageKind:
+	case cmdutils.StatusPageKind:
 		return c.applyStatusPage(fileBytes)
 	default:
-		return errors.Errorf("Unknown kind: %s", initialUnmarshall.Kind)
+		return errors.Errorf("Unknown kind: %s", statusKind)
 	}
-	return nil
 }
 func (c applyCmd) run() error {
 	if c.file != "" {
@@ -75,27 +55,23 @@ func (c applyCmd) run() error {
 		var checkFiles []string
 		var statusPageFiles []string
 		for _, file := range files {
-			fileBytes, err := readFile(fmt.Sprintf("%s/%s", c.folder, file.Name()))
+			fileBytes, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", c.folder, file.Name()))
 			if err != nil {
 				return err
 			}
-			var initialUnmarshall struct {
-				Kind StatusKind `yaml:"kind"`
-			}
-			err = yaml.Unmarshal(fileBytes, &initialUnmarshall)
+			statusKind, err := cmdutils.GetFileType(fileBytes)
 			if err != nil {
 				return err
 			}
-			log.Debugf("Kind: %s", initialUnmarshall.Kind)
-			switch initialUnmarshall.Kind {
-			case HttpHealthCheck:
+			switch statusKind {
+			case cmdutils.HttpHealthCheck:
 				checkFiles = append(checkFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
-			case TLSHealthCheck:
+			case cmdutils.TLSHealthCheck:
 				checkFiles = append(checkFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
-			case StatusPageKind:
+			case cmdutils.StatusPageKind:
 				statusPageFiles = append(statusPageFiles, fmt.Sprintf("%s/%s", c.folder, file.Name()))
 			default:
-				return errors.Errorf("Unknown kind: %s", initialUnmarshall.Kind)
+				return errors.Errorf("Unknown kind: %s", statusKind)
 			}
 		}
 		for _, file := range checkFiles {
@@ -237,18 +213,6 @@ func (c applyCmd) applyStatusPage(fileBytes []byte) error {
 	}
 	return nil
 }
-func GetGraphqlClient(ctx context.Context, url string) *graphql.Client {
-	accessToken := os.Getenv("ACCESS_TOKEN")
-	var httpClient *http.Client
-	if accessToken != "" {
-		src := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: accessToken},
-		)
-		httpClient = oauth2.NewClient(ctx, src)
-	}
-	gqlClient := graphql.NewClient(url, httpClient)
-	return gqlClient
-}
 
 func NewApplyCMD() *cobra.Command {
 	c := applyCmd{}
@@ -262,7 +226,7 @@ func NewApplyCMD() *cobra.Command {
 				return err
 			}
 			ctx := context.Background()
-			gqlClient := GetGraphqlClient(ctx, "http://localhost:8888/graphql")
+			gqlClient := cmdutils.GetGraphqlClient(ctx, "http://localhost:8888/graphql")
 			c.gqlClient = gqlClient
 			return c.run()
 		},
