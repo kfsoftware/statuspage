@@ -16,8 +16,6 @@ builds:
     binary: statuspage
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
     env:
