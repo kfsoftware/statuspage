@@ -1,0 +1,12 @@
+query GetChecks {
+  checks {
+    id
+    name
+    namespace
+    uptime {
+      uptime24h
+      uptime7d
+      uptime30d
+    }
+  }
+}

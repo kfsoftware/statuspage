@@ -1,0 +1,19 @@
+query statusPages {
+  statusPages {
+    id
+    name
+    namespace
+    title
+    slug
+    checks {
+      status
+      name
+      namespace
+      uptime {
+        uptime24h
+        uptime7d
+        uptime30d
+      }
+    }
+  }
+}

@@ -26,14 +26,62 @@ const (
 	Down      Status = "DOWN"
 )
 
+type Namespace struct {
+	ID        string `gorm:"primary_key"`
+	Name      string `gorm:"uniqueIndex"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+type PageCheck struct {
+	CheckID      string     `gorm:"primaryKey"`
+	Check        Check      `gorm:"foreignKey:CheckID"`
+	StatusPageID string     `gorm:"primaryKey;uniqueIndex:pagecheckorder;index;not null"`
+	StatusPage   StatusPage `gorm:"foreignKey:StatusPageID"`
+	Order        int        `gorm:"uniqueIndex:pagecheckorder;index"`
+	CreatedAt    time.Time
+}
+type StatusPage struct {
+	ID          string `gorm:"primary_key"`
+	Title       string
+	Name        string    `gorm:"uniqueIndex:statusslugns;index;not null"`
+	Slug        string    `gorm:"uniqueIndex"`
+	NamespaceID string    `gorm:"uniqueIndex:statusslugns;index;not null"`
+	Namespace   Namespace `gorm:"foreignKey:NamespaceID"`
+	Data        datatypes.JSON
+	Checks      []PageCheck `gorm:"foreignKey:StatusPageID"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (StatusPage) TableName() string {
+	return "statuspage"
+}
+func (s StatusPage) GetData() (*StatusPageData, error) {
+	marshalJSON, err := s.Data.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	statusPageData := &StatusPageData{}
+	err = json.Unmarshal(marshalJSON, &statusPageData)
+	if err != nil {
+		return nil, err
+	}
+	return statusPageData, nil
+}
+
 type Check struct {
-	ID                  string `gorm:"primaryKey"`
-	Identifier          string `gorm:"uniqueIndex"`
+	ID                  string    `gorm:"primaryKey"`
+	Name                string    `gorm:"uniqueIndex:checkname;index;not null"`
+	NamespaceID         string    `gorm:"uniqueIndex:checkname;index;not null"`
+	Namespace           Namespace `gorm:"foreignKey:NamespaceID"`
 	Type                check.Type
 	Data                datatypes.JSON
 	Frecuency           string
 	Status              Status
 	ErrorMsg            string
+	Uptime24h           float64
+	Uptime7d            float64
+	Uptime30d           float64
 	Message             string
 	LatestCheck         time.Time
 	CreatedAt           time.Time
@@ -41,6 +89,7 @@ type Check struct {
 	DeletedAt           gorm.DeletedAt `gorm:"index"`
 	LastFailureNotified *time.Time
 	FailureCount        int
+	StatusPages         []PageCheck `gorm:"foreignKey:CheckID"`
 	Executions          []CheckExecution
 }
 
@@ -109,12 +158,16 @@ type CheckExecution struct {
 	Message   string
 	Stats     datatypes.JSON
 	CheckID   string
+	Check     Check `gorm:"foreignKey:CheckID"`
 }
 
 func (CheckExecution) TableName() string {
 	return "check_execution"
 }
 
+type StatusPageData struct {
+	OrderChecks []string
+}
 type HttpCheckData struct {
 	Url        string `json:"url"`
 	StatusCode int    `json:"status_code"`
@@ -134,7 +187,7 @@ func notifyEndpointUp(db *gorm.DB, chk Check) {
 	slackWebhook := viper.GetString("slack.webhook")
 	if slackWebhook != "" && chk.LastFailureNotified != nil {
 		data := map[string]string{}
-		data["text"] = fmt.Sprintf("Endpoint up: %s\n%s", chk.Identifier, chk.ErrorMsg)
+		data["text"] = fmt.Sprintf("Endpoint up: %s\n%s", chk.Name, chk.ErrorMsg)
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
 			log.Warnf("Error sending notification to slack:%v", err)
@@ -162,7 +215,7 @@ func notifyEndpointDown(db *gorm.DB, chk Check) {
 	}
 	if slackWebhook != "" {
 		data := map[string]string{}
-		data["text"] = fmt.Sprintf("Endpoint down: %s\n%s", chk.Identifier, chk.ErrorMsg)
+		data["text"] = fmt.Sprintf("Endpoint down: %s\n%s", chk.Name, chk.ErrorMsg)
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
 			log.Warnf("Error sending notification to slack:%v", err)
@@ -206,7 +259,7 @@ func (c *Check) Check(db *gorm.DB) {
 	if err != nil {
 		log.Warnf("Failed to verify check=%v", err)
 	} else {
-		log.Infof("Verified check successfully %s", c.Identifier)
+		log.Infof("Verified check successfully %s", c.Name)
 	}
 }
 func (c *Check) check(db *gorm.DB) error {
@@ -297,17 +350,16 @@ func (c *Check) check(db *gorm.DB) error {
 		}
 		chk.Message = result.Message
 		chk.LatestCheck = time.Now()
-
 		statsBytes, err := json.Marshal(result.Statistics)
 		if err != nil {
 			log.Errorf("Health check failed id=%s type=%s err=%v", chk.ID, chk.Type, err)
 			return err
 		}
 		chkExecution := CheckExecution{
-			ID:      uuid.New().String(),
-			Status:  status,
-			Stats:   statsBytes,
-			CheckID: chk.ID,
+			ID:     uuid.New().String(),
+			Status: status,
+			Stats:  statsBytes,
+			Check:  chk,
 		}
 		resultDb := db.Create(&chkExecution)
 		if resultDb.Error != nil {

@@ -1,0 +1,8 @@
+projects:
+  statuspage:
+    schema: ../schema.graphql
+    documents: operations/**/*.graphql
+    extensions:
+      endpoints:
+        default:
+          url: http://localhost:8888/graphql

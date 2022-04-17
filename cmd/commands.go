@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/kfsoftware/statuspage/cmd/apply"
 	"github.com/kfsoftware/statuspage/cmd/server"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +20,10 @@ func NewCmdStatusPage() *cobra.Command {
 		Short: "monitor services",
 		Long:  statusPageDesc,
 	}
-	cmd.AddCommand(server.NewServerCmd())
+	cmd.AddCommand(
+		server.NewServerCmd(),
+		apply.NewApplyCMD(),
+	)
 
 	return cmd
 }

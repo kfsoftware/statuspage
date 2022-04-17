@@ -1,3 +1,15 @@
+models:
+  StatusPage:
+    model: github.com/kfsoftware/statuspage/pkg/graphql/models.StatusPage
+  HttpCheck:
+    model: github.com/kfsoftware/statuspage/pkg/graphql/models.HTTPCheck
+  TcpCheck:
+    model: github.com/kfsoftware/statuspage/pkg/graphql/models.TCPCheck
+  TlsCheck:
+    model: github.com/kfsoftware/statuspage/pkg/graphql/models.TLSCheck
+  IcmpCheck:
+    model: github.com/kfsoftware/statuspage/pkg/graphql/models.ICMPCheck
+
 schema: schema.graphql
 exec:
   filename: pkg/graphql/generated/generated.go

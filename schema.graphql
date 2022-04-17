@@ -11,61 +11,102 @@ type CheckExecution {
     errorMsg: String!
     status: String!
 }
+type CheckUptime {
+    uptime24h: Float!
+    uptime7d: Float!
+    uptime30d: Float!
+}
 interface Check {
     id: ID!
-    identifier: String!
+    name: String!
+    namespace: String!
     frecuency: String!
+    uptime: CheckUptime!
     status: String!
     latestCheck: Time
     message: String!
     errorMsg: String!
+    latestExecutions(limit: Int!): [CheckExecution!]
+    executions(
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 type HttpCheck implements Check {
     id: ID!
-    identifier: String!
+    name: String!
+    namespace: String!
     frecuency: String!
+    uptime: CheckUptime!
     url: String!
     status: String!
     latestCheck: Time
     message: String!
     errorMsg: String!
+    latestExecutions(limit: Int!): [CheckExecution!]
+    executions(
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 
 type TcpCheck implements Check {
     id: ID!
-    identifier: String!
+    name: String!
+    namespace: String!
     frecuency: String!
+    uptime: CheckUptime!
     address: String!
     status: String!
     latestCheck: Time
     message: String!
     errorMsg: String!
+    latestExecutions(limit: Int!): [CheckExecution!]
+    executions(
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 
 type TlsCheck implements Check {
     id: ID!
-    identifier: String!
+    name: String!
+    namespace: String!
     frecuency: String!
+    uptime: CheckUptime!
     address: String!
     status: String!
     latestCheck: Time
     message: String!
     errorMsg: String!
+    latestExecutions(limit: Int!): [CheckExecution!]
+    executions(
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 
 type IcmpCheck implements Check {
     id: ID!
-    identifier: String!
+    name: String!
+    namespace: String!
     frecuency: String!
+    uptime: CheckUptime!
     address: String!
     status: String!
     latestCheck: Time
     message: String!
     errorMsg: String!
+    latestExecutions(limit: Int!): [CheckExecution!]
+    executions(
+        from: Time,
+        until: Time
+    ): [CheckExecution!]
 }
 
 input CreateHttpCheckInput {
-    id: String!
+    name: String!
+    namespace: String!
     frecuency: String!
     url: String!
     statusCode: Int!
@@ -82,29 +123,54 @@ type Mutation {
     createTcpCheck(input: CreateTcpCheckInput!): Check!
     createTlsCheck(input: CreateTlsCheckInput!): Check!
     createIcmpCheck(input: CreateIcmpCheckInput!): Check!
+    createStatusPage(input: CreateStatusPageInput!): StatusPage!
     deleteCheck(id: ID!): DeleteResponse!
 }
-
+type StatusPage {
+    id: ID!
+    name: String!
+    namespace: String!
+    slug: String!
+    title: String!
+    checks: [Check!]
+}
+input CreateStatusPageInput {
+    name: String!
+    namespace: String!
+    title: String!
+    checkSlugs: [String!]!
+}
 input CreateIcmpCheckInput {
-    id: String!
+    name: String!
+    namespace: String!
     frecuency: String!
     address: String!
 }
 
 input CreateTlsCheckInput {
-    id: String!
+    name: String!
+    namespace: String!
     frecuency: String!
     address: String!
     rootCAs:String
 }
 
 input CreateTcpCheckInput {
-    id: String!
+    name: String!
+    namespace: String!
     frecuency: String!
     address: String!
 }
+type Namespace {
+    id: ID!
+    name: String!
+}
 type Query {
-    checks: [Check!]
+    statusPage(slug: String!): StatusPage
+    statusPages(namespace: String): [StatusPage!]
+    namespaces: [Namespace!]
+    latestExecutions(checkId: ID!, limit: Int! = 50): [CheckExecution!]
+    checks(namespace: String): [Check!]
     check(checkId: ID!): Check
     executions(
         checkId: ID!,

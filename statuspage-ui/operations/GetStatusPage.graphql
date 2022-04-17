@@ -1,0 +1,24 @@
+query statusPage($slug: String!) {
+  statusPage(slug: $slug) {
+    id
+    name
+    namespace
+    title
+
+    checks {
+      id
+      name
+      namespace
+      status
+      uptime {
+        uptime24h
+        uptime7d
+        uptime30d
+      }
+      latestExecutions(limit: 50) {
+        executionTime
+        status
+      }
+    }
+  }
+}

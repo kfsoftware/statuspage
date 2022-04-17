@@ -222,8 +222,12 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 			Colorful:      false,
 		},
 	)
+	_ = newLogger
+	gormLogger := logger.Default.LogMode(logger.Info)
+	_ = gormLogger
 	gormConfig := &gorm.Config{
-		Logger: newLogger,
+		Logger:               gormLogger,
+		FullSaveAssociations: true,
 	}
 	switch driverName {
 	case PostgresqlDriver:
@@ -247,6 +251,10 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 	default:
 		return nil, errors.Errorf("Driver %s not supported", string(driverName))
 	}
+	err = dbClient.AutoMigrate(&db.PageCheck{})
+	if err != nil {
+		return nil, err
+	}
 	err = dbClient.AutoMigrate(&db.Check{})
 	if err != nil {
 		return nil, err
@@ -255,7 +263,14 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 	if err != nil {
 		return nil, err
 	}
-
+	err = dbClient.AutoMigrate(&db.StatusPage{})
+	if err != nil {
+		return nil, err
+	}
+	err = dbClient.AutoMigrate(&db.Namespace{})
+	if err != nil {
+		return nil, err
+	}
 	return dbClient, nil
 }
 

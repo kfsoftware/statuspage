@@ -18,27 +18,44 @@ type CheckExecution struct {
 	Status        string    `json:"status"`
 }
 
+type CheckUptime struct {
+	Uptime24h float64 `json:"uptime24h"`
+	Uptime7d  float64 `json:"uptime7d"`
+	Uptime30d float64 `json:"uptime30d"`
+}
+
 type CreateHTTPCheckInput struct {
-	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
 	Frecuency  string `json:"frecuency"`
 	URL        string `json:"url"`
 	StatusCode int    `json:"statusCode"`
 }
 
-type CreateIcmpCheckInput struct {
-	ID        string `json:"id"`
+type CreateICMPCheckInput struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 	Frecuency string `json:"frecuency"`
 	Address   string `json:"address"`
 }
 
+type CreateStatusPageInput struct {
+	Name       string   `json:"name"`
+	Namespace  string   `json:"namespace"`
+	Title      string   `json:"title"`
+	CheckSlugs []string `json:"checkSlugs"`
+}
+
 type CreateTCPCheckInput struct {
-	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 	Frecuency string `json:"frecuency"`
 	Address   string `json:"address"`
 }
 
 type CreateTLSCheckInput struct {
-	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
 	Frecuency string  `json:"frecuency"`
 	Address   string  `json:"address"`
 	RootCAs   *string `json:"rootCAs"`
@@ -48,58 +65,11 @@ type DeleteResponse struct {
 	ID string `json:"id"`
 }
 
-type HTTPCheck struct {
-	ID          string     `json:"id"`
-	Identifier  string     `json:"identifier"`
-	Frecuency   string     `json:"frecuency"`
-	URL         string     `json:"url"`
-	Status      string     `json:"status"`
-	LatestCheck *time.Time `json:"latestCheck"`
-	Message     string     `json:"message"`
-	ErrorMsg    string     `json:"errorMsg"`
+type Namespace struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
-
-func (HTTPCheck) IsCheck() {}
-
-type IcmpCheck struct {
-	ID          string     `json:"id"`
-	Identifier  string     `json:"identifier"`
-	Frecuency   string     `json:"frecuency"`
-	Address     string     `json:"address"`
-	Status      string     `json:"status"`
-	LatestCheck *time.Time `json:"latestCheck"`
-	Message     string     `json:"message"`
-	ErrorMsg    string     `json:"errorMsg"`
-}
-
-func (IcmpCheck) IsCheck() {}
 
 type PollResult struct {
 	Took int `json:"took"`
 }
-
-type TCPCheck struct {
-	ID          string     `json:"id"`
-	Identifier  string     `json:"identifier"`
-	Frecuency   string     `json:"frecuency"`
-	Address     string     `json:"address"`
-	Status      string     `json:"status"`
-	LatestCheck *time.Time `json:"latestCheck"`
-	Message     string     `json:"message"`
-	ErrorMsg    string     `json:"errorMsg"`
-}
-
-func (TCPCheck) IsCheck() {}
-
-type TLSCheck struct {
-	ID          string     `json:"id"`
-	Identifier  string     `json:"identifier"`
-	Frecuency   string     `json:"frecuency"`
-	Address     string     `json:"address"`
-	Status      string     `json:"status"`
-	LatestCheck *time.Time `json:"latestCheck"`
-	Message     string     `json:"message"`
-	ErrorMsg    string     `json:"errorMsg"`
-}
-
-func (TLSCheck) IsCheck() {}
