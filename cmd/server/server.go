@@ -8,18 +8,18 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gorilla/websocket"
+	"github.com/kfsoftware/statuspage/config"
 	"github.com/kfsoftware/statuspage/pkg/db"
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
 	"github.com/kfsoftware/statuspage/pkg/graphql/resolvers"
 	"github.com/kfsoftware/statuspage/pkg/jobs"
-	"github.com/newrelic/go-agent/v3/integrations/nrlogrus"
-	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"net/http"
@@ -37,20 +37,26 @@ func (s *serverCmd) validate() error {
 }
 func (s *serverCmd) run() error {
 	var err error
+	viper.SetDefault("database.type", "sql")
+	viper.SetDefault("database.driver", "sqlite")
+	viper.SetDefault("database.dataSource", "gorm.db")
 	provider := viper.GetString("database.type")
 	var dbClient *gorm.DB
+	var drName config.DriverName
 	switch provider {
 	case string(Database):
 		driverName := viper.GetString("database.driver")
 		dataSource := viper.GetString("database.dataSource")
-		var drName DriverName
 		switch driverName {
-		case PostgresqlDriver:
-			drName = PostgresqlDriver
-		case MySQLDriver:
-			drName = MySQLDriver
+		case config.PostgresqlDriver:
+			drName = config.PostgresqlDriver
+		case config.MySQLDriver:
+			drName = config.MySQLDriver
+		case config.SQLiteDriver:
+			drName = config.SQLiteDriver
 		default:
-			return errors.Errorf("Driver %s not supported", driverName)
+			drName = config.SQLiteDriver
+			log.Warnf("No database driver specified, defaulting to %s", config.SQLiteDriver)
 		}
 		dbClient, err = newDbStorage(
 			drName,
@@ -88,29 +94,11 @@ func (s *serverCmd) run() error {
 	}
 	es := generated.NewExecutableSchema(generated.Config{
 		Resolvers: &resolvers.Resolver{
-			Db:       dbClient,
-			Registry: schedRegistry,
+			DriverName: drName,
+			Db:         dbClient,
+			Registry:   schedRegistry,
 		},
 	})
-	var app *newrelic.Application
-	viper.SetDefault("newrelic.name", "Status Page")
-	newRelicLicense := viper.GetString("newrelic.license")
-	if newRelicLicense != "" {
-		appName := viper.GetString("newrelic.name")
-		app, err = newrelic.NewApplication(
-			newrelic.ConfigAppName(appName),
-			newrelic.ConfigLicense(newRelicLicense),
-			newrelic.ConfigDistributedTracerEnabled(true),
-			func(config *newrelic.Config) {
-				log.SetLevel(log.WarnLevel)
-				config.Logger = nrlogrus.StandardLogger()
-			},
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	h := handler.New(es)
 	h.AddTransport(transport.Websocket{
 		KeepAlivePingInterval: 10 * time.Second,
@@ -135,37 +123,15 @@ func (s *serverCmd) run() error {
 		writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
 		h.ServeHTTP(writer, request)
 	}
-	if app != nil {
-		http.HandleFunc(
-			newrelic.WrapHandleFunc(
-				app,
-				"/graphql",
-				graphqlHandler,
-			),
-		)
-	} else {
-		http.HandleFunc(
-			"/graphql",
-			graphqlHandler,
-		)
-	}
+	http.HandleFunc(
+		"/graphql",
+		graphqlHandler,
+	)
 	playgroundHandler := playground.Handler("GraphQL", "/graphql")
-	pgroundHandler := func(writer http.ResponseWriter, request *http.Request) {
-		playgroundHandler.ServeHTTP(writer, request)
-	}
-	if app != nil {
-		http.HandleFunc(
-			newrelic.WrapHandleFunc(app, "/playground",
-				pgroundHandler,
-			),
-		)
-	} else {
-		http.HandleFunc(
-			"/playground",
-			playgroundHandler,
-		)
-	}
-
+	http.HandleFunc(
+		"/playground",
+		playgroundHandler,
+	)
 	listenAddr := s.addr
 	if listenAddr == "" {
 		listenAddr = viper.GetString("address")
@@ -185,10 +151,12 @@ func NewServerCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			viper.SetConfigFile(c.config)
-			err := viper.ReadInConfig()
-			if err != nil {
-				return err
+			if c.config != "" {
+				viper.SetConfigFile(c.config)
+				err := viper.ReadInConfig()
+				if err != nil {
+					return err
+				}
 			}
 			if err := c.validate(); err != nil {
 				return err
@@ -197,21 +165,12 @@ func NewServerCmd() *cobra.Command {
 		},
 	}
 	persistentFlags := cmd.PersistentFlags()
-	persistentFlags.StringVarP(&c.config, "config", "", "statuspage", "Configuration file")
+	persistentFlags.StringVarP(&c.config, "config", "", "", "Configuration file")
 	persistentFlags.StringVarP(&c.addr, "address", "", "", "Listen address")
-
-	cmd.MarkPersistentFlagRequired("config")
 	return cmd
 }
 
-type DriverName string
-
-const (
-	PostgresqlDriver = "postgres"
-	MySQLDriver      = "mysql"
-)
-
-func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error) {
+func newDbStorage(driverName config.DriverName, dataSourceName string) (*gorm.DB, error) {
 	var dbClient *gorm.DB
 	var err error
 	newLogger := logger.New(
@@ -221,16 +180,13 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 			LogLevel:      logger.Silent,
 			Colorful:      false,
 		},
-	)
-	_ = newLogger
-	gormLogger := logger.Default.LogMode(logger.Info)
-	_ = gormLogger
+	).LogMode(logger.Info)
 	gormConfig := &gorm.Config{
-		Logger:               gormLogger,
+		Logger:               newLogger,
 		FullSaveAssociations: true,
 	}
 	switch driverName {
-	case PostgresqlDriver:
+	case config.PostgresqlDriver:
 		dbClient, err = gorm.Open(
 			postgres.New(
 				postgres.Config{
@@ -243,8 +199,13 @@ func newDbStorage(driverName DriverName, dataSourceName string) (*gorm.DB, error
 		if err != nil {
 			return nil, err
 		}
-	case MySQLDriver:
+	case config.MySQLDriver:
 		dbClient, err = gorm.Open(mysql.Open(dataSourceName), gormConfig)
+		if err != nil {
+			return nil, err
+		}
+	case config.SQLiteDriver:
+		dbClient, err = gorm.Open(sqlite.Open("gorm.db"), gormConfig)
 		if err != nil {
 			return nil, err
 		}

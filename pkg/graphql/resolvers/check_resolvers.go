@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
+	"github.com/kfsoftware/statuspage/config"
 	"github.com/kfsoftware/statuspage/pkg/check"
 	"github.com/kfsoftware/statuspage/pkg/db"
 	"github.com/kfsoftware/statuspage/pkg/graphql/generated"
@@ -18,8 +19,9 @@ import (
 )
 
 type Resolver struct {
-	Db       *gorm.DB
-	Registry *jobs.SchedulerRegistry
+	Db         *gorm.DB
+	Registry   *jobs.SchedulerRegistry
+	DriverName config.DriverName
 }
 type httpCheckResolver struct{ *Resolver }
 
@@ -82,20 +84,47 @@ func (t tlsCheckResolver) Uptime(ctx context.Context, obj *models.TLSCheck) (*mo
 }
 
 type UptimeRawSQL struct {
-	Uptimeduration24h string
-	Totalduration24h  string
-	Uptimeratio24h    float64
-	Uptimeduration7d  string
-	Totalduration7d   string
-	Uptimeratio7d     float64
-	Uptimeduration30d string
-	Totalduration30d  string
-	Uptimeratio30d    float64
+	Uptimeratio24h float64
+	Uptimeratio7d  float64
+	Uptimeratio30d float64
 }
 
 func (r Resolver) getUptimeForCheck(checkID string) (*models.CheckUptime, error) {
 	var uptimeRaw UptimeRawSQL
-	result := r.Db.Raw(`
+	switch r.DriverName {
+	case config.SQLiteDriver:
+		result := r.Db.Raw(`
+with t as (select julianday(case
+                                when lag(created_at) over (order by created_at desc) is not null
+                                    then lag(created_at) over (order by created_at desc)
+                                else datetime('now', 'localtime') end) - julianday(created_at) duration,
+                  created_at,
+                  status,
+                  check_id
+           from check_execution
+           where check_id = ?)
+select (
+               sum(duration) filter ( where created_at > datetime('now', '-1 days') ) /
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-1 days') )
+           ) as uptimeratio24h,
+       (
+               sum(duration) filter ( where created_at > datetime('now', '-7 days') ) /
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-7 days') )
+           ) as uptimeratio7d,
+       (
+               sum(duration) filter ( where created_at > datetime('now', '-30 days') ) /
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-30 days') )
+           ) as uptimeratio30d
+from t
+group by check_id;
+`, checkID).Scan(&uptimeRaw)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+	case config.MySQLDriver:
+		return nil, errors.New("not implemented")
+	case config.PostgresqlDriver:
+		result := r.Db.Raw(`
 with t as (select case
                       when lag(created_at) over (order by created_at desc) is not null
                           then lag(created_at) over (order by created_at desc)
@@ -123,8 +152,9 @@ select
 from t
 group by check_id;
 `, checkID).Scan(&uptimeRaw)
-	if result.Error != nil {
-		return nil, result.Error
+		if result.Error != nil {
+			return nil, result.Error
+		}
 	}
 	return &models.CheckUptime{
 		Uptime24h: uptimeRaw.Uptimeratio24h,

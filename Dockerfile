@@ -1,7 +1,7 @@
 FROM golang:1.15.1 AS builder
 
 # no need to include cgo bindings
-ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+ENV CGO_ENABLED=1 GOOS=linux GOARCH=amd64
 
 # add ca certificates and timezone data files
 # hadolint ignore=DL3008

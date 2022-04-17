@@ -23,6 +23,7 @@ require (
 	gorm.io/datatypes v1.0.0
 	gorm.io/driver/mysql v1.0.5
 	gorm.io/driver/postgres v1.0.8
+	gorm.io/driver/sqlite v1.1.3
 	gorm.io/gorm v1.21.6
 	k8s.io/apimachinery v0.23.5
 )
@@ -52,6 +53,7 @@ require (
 	github.com/jinzhu/now v1.1.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
+	github.com/mattn/go-sqlite3 v1.14.3 // indirect
 	github.com/mitchellh/mapstructure v1.2.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
