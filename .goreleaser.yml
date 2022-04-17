@@ -40,10 +40,10 @@ dockers:
     goarch: amd64
     dockerfile: Dockerfile
     image_templates:
-      - "ghcr.io/kfsoftware/statuspage:{{ .Tag }}"
-      - "ghcr.io/kfsoftware/statuspage:v{{ .Major }}"
-      - "ghcr.io/kfsoftware/statuspage:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/kfsoftware/statuspage:latest"
+      - "ghcr.io/kfsoftware/statuspage-api:{{ .Tag }}"
+      - "ghcr.io/kfsoftware/statuspage-api:v{{ .Major }}"
+      - "ghcr.io/kfsoftware/statuspage-api:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/kfsoftware/statuspage-api:latest"
 
     extra_files:
       - LICENSE
