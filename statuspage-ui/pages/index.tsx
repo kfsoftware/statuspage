@@ -70,7 +70,7 @@ const Home: NextPage<{ query: StatusPagesQuery }> = ({ query }) => {
   );
 };
 
-export async function getStaticProps() {
+export async function getServerSideProps() {
   const { data } = await client.query<
     StatusPagesQuery,
     StatusPagesQueryVariables
@@ -82,7 +82,6 @@ export async function getStaticProps() {
     props: {
       query: data,
     },
-    revalidate: 1,
   };
 }
 

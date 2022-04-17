@@ -96,7 +96,10 @@ type UptimeRawSQL struct {
 func (r Resolver) getUptimeForCheck(checkID string) (*models.CheckUptime, error) {
 	var uptimeRaw UptimeRawSQL
 	result := r.Db.Raw(`
-with t as (select lag(created_at) over (order by created_at desc) - created_at duration, created_at, status, check_id
+with t as (select case
+                      when lag(created_at) over (order by created_at desc) is not null
+                          then lag(created_at) over (order by created_at desc)
+                      else now() end - created_at duration, created_at, status, check_id
            from check_execution
            where check_id = ?)
 select

@@ -1,7 +1,5 @@
 import * as reactSolidIcons from "@heroicons/react/solid";
-import {
-  CheckCircleIcon, SearchIcon
-} from "@heroicons/react/solid";
+import { CheckCircleIcon, SearchIcon } from "@heroicons/react/solid";
 import type { GetStaticPropsContext, NextPage } from "next";
 import Head from "next/head";
 import Link from "next/link";
@@ -10,7 +8,10 @@ import client from "../apollo/client";
 import {
   StatusPageDocument,
   StatusPageQuery,
-  StatusPageQueryVariables, StatusPagesDocument, StatusPagesQuery, StatusPagesQueryVariables
+  StatusPageQueryVariables,
+  StatusPagesDocument,
+  StatusPagesQuery,
+  StatusPagesQueryVariables,
 } from "../operations";
 
 const Home: NextPage<{ statusPage: StatusPage }> = ({ statusPage }) => {
@@ -476,18 +477,7 @@ type ReactType =
   | "ZoomInIcon"
   | "ZoomOutIcon";
 
-export async function getStaticPaths() {
-  const { data } = await client.query<
-    StatusPagesQuery,
-    StatusPagesQueryVariables
-  >({
-    query: StatusPagesDocument,
-    variables: {},
-  });
-  const paths = data.statusPages!.map((page) => `/${page.slug}`);
-  return { paths, fallback: "blocking" };
-}
-export async function getStaticProps({
+export async function getServerSideProps({
   params,
 }: GetStaticPropsContext<{ slug: string }>) {
   const { data } = await client.query<
@@ -500,7 +490,7 @@ export async function getStaticProps({
     },
   });
   if (!data.statusPage) {
-    return { props: { statusPage: null }, revalidate: 60 };
+    return { props: { statusPage: null } };
   }
   const statusPageResult = data.statusPage!;
   const status = {
@@ -534,7 +524,6 @@ export async function getStaticProps({
     props: {
       statusPage,
     },
-    revalidate: 10,
   };
 }
 
