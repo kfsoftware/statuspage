@@ -1,2 +1,3 @@
 # Monitor your services
-> Documentation coming soon
+
+Minimalistic self-hosted monitoring API with emphasis on developer experience.

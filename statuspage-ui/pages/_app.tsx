@@ -4,7 +4,7 @@ import { AuthorizedApolloProvider } from "../apollo/apollo";
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
-    <AuthorizedApolloProvider url={"http://localhost:8888/graphql"}>
+    <AuthorizedApolloProvider url={process.env.GRAPHQL_URI!}>
       <Component {...pageProps} />
     </AuthorizedApolloProvider>
   );
