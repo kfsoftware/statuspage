@@ -105,16 +105,17 @@ with t as (select julianday(case
            from check_execution
            where check_id = ?)
 select (
-               sum(duration) filter ( where created_at > datetime('now', '-1 days') ) /
-               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-1 days') )
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-1 days') ) /
+sum(duration) filter ( where created_at > datetime('now', '-1 days') )
+               
            ) as uptimeratio24h,
        (
-               sum(duration) filter ( where created_at > datetime('now', '-7 days') ) /
-               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-7 days') )
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-7 days') ) /
+               sum(duration) filter ( where created_at > datetime('now', '-7 days') )
            ) as uptimeratio7d,
-       (
-               sum(duration) filter ( where created_at > datetime('now', '-30 days') ) /
-               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-30 days') )
+        (
+               sum(duration) filter ( where status = 'UP' and created_at > datetime('now', '-30 days') ) /
+               sum(duration) filter ( where created_at > datetime('now', '-30 days') )
            ) as uptimeratio30d
 from t
 group by check_id;
