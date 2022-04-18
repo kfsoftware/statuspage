@@ -13,6 +13,7 @@ import (
 	"github.com/kfsoftware/statuspage/pkg/graphql/models"
 	"github.com/kfsoftware/statuspage/pkg/jobs"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"strings"
 	"time"
@@ -441,6 +442,12 @@ func (m mutationResolver) addCheckResult(id string) error {
 	}
 	chk.Check(m.Db)
 	err = m.Registry.Register(chk.ID, interval, func() {
+		chk := db.Check{}
+		resultDb := m.Db.First(&chk, "id = ?", id)
+		if resultDb.Error != nil {
+			log.Warnf("Error getting check %s: %s", id, resultDb.Error)
+			return
+		}
 		chk.Check(m.Db)
 	})
 	if err != nil {
