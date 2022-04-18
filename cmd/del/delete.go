@@ -17,9 +17,13 @@ type deleteCmd struct {
 	gqlClient *graphql.Client
 	file      string
 	folder    string
+	apiUrl    string
 }
 
 func (c deleteCmd) validate() error {
+	if c.apiUrl == "" {
+		return errors.New("--api-url is required")
+	}
 	return nil
 }
 
@@ -176,12 +180,13 @@ func NewDeleteCMD() *cobra.Command {
 				return err
 			}
 			ctx := context.Background()
-			gqlClient := cmdutils.GetGraphqlClient(ctx, "http://localhost:8888/graphql")
+			gqlClient := cmdutils.GetGraphqlClient(ctx, c.apiUrl)
 			c.gqlClient = gqlClient
 			return c.run()
 		},
 	}
 	f := cmd.Flags()
+	f.StringVarP(&c.apiUrl, "api-url", "u", "http://localhost:8888/graphql", "api url")
 	f.StringVarP(&c.file, "file", "f", "", "file to delete")
 	f.StringVarP(&c.folder, "folder", "k", "", "folder where the checks are located")
 	return cmd
