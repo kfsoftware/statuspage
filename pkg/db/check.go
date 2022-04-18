@@ -89,7 +89,9 @@ type Check struct {
 	UpdatedAt           time.Time
 	DeletedAt           gorm.DeletedAt `gorm:"index"`
 	LastFailureNotified *time.Time
+	LastWarningNotified *time.Time
 	FailureCount        int
+	WarningCount        int
 	StatusPages         []PageCheck `gorm:"foreignKey:CheckID"`
 	Executions          []CheckExecution
 }
@@ -170,8 +172,9 @@ type StatusPageData struct {
 	OrderChecks []string
 }
 type HttpCheckData struct {
-	Url        string `json:"url"`
-	StatusCode int    `json:"status_code"`
+	Url                        string `json:"url"`
+	StatusCode                 int    `json:"status_code"`
+	CertificateExpirationDelta string `json:"certificateExpirationDelta"`
 }
 type TlsCheckData struct {
 	Address string `json:"address"`
@@ -206,6 +209,37 @@ func notifyEndpointUp(db *gorm.DB, chk Check) {
 	if result.Error != nil {
 		log.Warnf("Error saving item :%v", result.Error)
 		return
+	}
+}
+func notifyWarnings(db *gorm.DB, chk Check, result check.Result) {
+	slackWebhook := viper.GetString("slack.webhook")
+	if chk.LastFailureNotified != nil && !time.Now().After(chk.LastWarningNotified.Add(5*time.Minute)) {
+		log.Infof("Skip notification since lastFailureNotification was=%v", chk.LastWarningNotified)
+		return
+	}
+	if slackWebhook != "" {
+		for _, warn := range result.Warnings {
+			data := map[string]string{}
+			data["text"] = fmt.Sprintf("Warning: %s\n%s", chk.Name, warn)
+			dataBytes, err := json.Marshal(data)
+			if err != nil {
+				log.Warnf("Error sending notification to slack:%v", err)
+				return
+			}
+			_, err = http.Post(slackWebhook, "application/json", bytes.NewBuffer(dataBytes))
+			if err != nil {
+				log.Warnf("Error sending notification to slack:%v", err)
+				return
+			}
+		}
+
+	}
+	now := time.Now()
+	chk.LastWarningNotified = &now
+	chk.WarningCount += 1
+	resultDB := db.Save(chk)
+	if resultDB.Error != nil {
+		log.Errorf("Failed to save check=%v with error=%v", chk, resultDB.Error)
 	}
 }
 func notifyEndpointDown(db *gorm.DB, chk Check) {
@@ -289,7 +323,17 @@ func (c *Check) check(db *gorm.DB) error {
 		} else {
 			expectedStatusCode = httpCheckData.StatusCode
 		}
-		healthChk = check.NewHttpCheck(url, &expectedStatusCode)
+		var certificateWarningDelta time.Duration
+		if httpCheckData.CertificateExpirationDelta != "" {
+			certificateWarningDelta, err = time.ParseDuration(httpCheckData.CertificateExpirationDelta)
+			if err != nil {
+				log.Errorf("Failed to parse certificateWarningDelta:%v", err)
+				certificateWarningDelta = time.Hour * 24 * 15
+			}
+		} else {
+			certificateWarningDelta = time.Hour * 24 * 15
+		}
+		healthChk = check.NewHttpCheck(url, &expectedStatusCode, certificateWarningDelta)
 	case check.TlsType:
 		tlsCheckData, err := chk.GetTlsData()
 		if err != nil {
@@ -377,6 +421,9 @@ func (c *Check) check(db *gorm.DB) error {
 			notifyEndpointDown(db, chk)
 		} else {
 			notifyEndpointUp(db, chk)
+		}
+		if len(result.Warnings) > 0 {
+			notifyWarnings(db, chk, result)
 		}
 	} else {
 		log.Warnf("No healthcheck found for id=%s type=%s", chk.ID, string(chk.Type))

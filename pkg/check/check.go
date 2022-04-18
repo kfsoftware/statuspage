@@ -9,7 +9,11 @@ type Statistics interface {
 type Result struct {
 	Error      error
 	Message    string
+	Warnings   []Warning
 	Statistics Statistics
+}
+type Warning struct {
+	Message string
 }
 type Type string
 
