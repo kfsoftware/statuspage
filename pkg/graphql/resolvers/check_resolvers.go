@@ -697,7 +697,7 @@ func mapNamespace(n *db.Namespace) *models.Namespace {
 }
 func (r Resolver) getLatestExecutions(checkID string, limit int) ([]*models.CheckExecution, error) {
 	var executions []db.CheckExecution
-	result := r.Db.Order("created_at asc").
+	result := r.Db.Order("created_at desc").
 		Where("check_id = ?", checkID).Limit(limit).
 		Find(&executions)
 	if result.Error != nil {
